@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.filename }} - Section Browser{% endblock %}
+
+{% block content %}
+<!-- Jinja2 Macro for Recursive Section Rendering -->
+{% macro render_section_tree(nodes, active_num) %}
+    <div class="list-group list-group-flush">
+        {% for node in nodes %}
+            <div class="mb-1">
+                <a href="/document/{{ document.id }}?section={{ node.number }}" 
+                   class="section-tree-item d-flex justify-content-between align-items-center {% if node.number == active_num %}active{% endif %}"
+                   style="padding-left: {{ 10 + node.depth * 15 }}px;">
+                    <span class="text-truncate" title="{{ node.number }} {{ node.title }}">
+                        {{ node.number }} {{ node.title }}
+                    </span>
+                    {% if node.req_count > 0 %}
+                    <span class="badge badge-reqs rounded-pill ms-2">{{ node.req_count }}</span>
+                    {% endif %}
+                </a>
+                {% if node.nested_children %}
+                    {{ render_section_tree(node.nested_children, active_num) }}
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+{% endmacro %}
+
+<div class="row">
+    <!-- Left Sidebar: Section Tree Navigation -->
+    <div class="col-md-4 col-lg-3 sidebar py-3 px-2 border-end bg-white">
+        <div class="d-flex align-items-center justify-content-between mb-3 px-3">
+            <h6 class="text-uppercase text-secondary font-weight-bold mb-0">Sections Browser</h6>
+            <a href="/" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+        </div>
+        <div class="section-tree-container">
+            {{ render_section_tree(section_tree, selected_section.number) }}
+        </div>
+    </div>
+
+    <!-- Right Pane: Section Details & Reconstruction -->
+    <div class="col-md-8 col-lg-9 content-area py-4 px-4 bg-light">
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-body bg-white rounded">
+                <!-- Section Header -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <span class="text-muted text-uppercase small">Selected Section</span>
+                        <h2 class="text-success mb-1">
+                            {{ selected_section.number }} &mdash; {{ selected_section.title }}
+                        </h2>
+                        <p class="text-muted mb-0">
+                            <i class="bi bi-file-earmark-text-fill text-secondary me-1"></i>
+                            Page: {{ selected_section.page_number or "N/A" }} |
+                            <i class="bi bi-list-ol text-secondary me-1"></i>
+                            Requirements in Section: {{ section_requirements | length }}
+                        </p>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-primary" disabled>
+                            <i class="bi bi-play-circle-fill me-1"></i> Start Analysis (Future Action)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Recommended Section Notice -->
+                {% if recommendation and recommendation.number == selected_section.number %}
+                <div class="alert alert-success d-flex align-items-center mb-3 border-0 bg-opacity-10 bg-success text-success" role="alert">
+                    <i class="bi bi-star-fill me-2 fs-5"></i>
+                    <div>
+                        <strong>Recommended Starting Section!</strong> This section was highlighted based on its requirements volume ({{ recommendation.req_count }} requirements).
+                    </div>
+                </div>
+                {% elif recommendation %}
+                <div class="alert alert-light border d-flex justify-content-between align-items-center mb-3 py-2" role="alert">
+                    <div class="small">
+                        <i class="bi bi-lightbulb-fill text-warning me-1"></i>
+                        Recommended starting section: 
+                        <a href="/document/{{ document.id }}?section={{ recommendation.number }}" class="text-success font-weight-bold">
+                            {{ recommendation.number }} &mdash; {{ recommendation.title }}
+                        </a> ({{ recommendation.req_count }} reqs).
+                    </div>
+                    <a href="/document/{{ document.id }}?section={{ recommendation.number }}" class="btn btn-success btn-sm py-0 px-2">Go</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Main Form for Target Group (Uses HTML5 form attribute to avoid nesting forms) -->
+        <form id="group-form" action="{{ url_for('create_group', doc_id=document.id) }}" method="POST">
+            <input type="hidden" name="section_number" value="{{ selected_section.number }}">
+        </form>
+
+        <!-- Section Content Reconstruction -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="card-title mb-0"><i class="bi bi-file-text-fill text-success me-2"></i>Document Content Reconstruction</h5>
+                    <small class="text-muted">Reconstructed in exact source order from canonical element store. Requirements are highlighted in yellow.</small>
+                </div>
+                {% if section_requirements %}
+                <div>
+                    <button form="group-form" type="submit" class="btn btn-warning btn-sm font-weight-bold shadow-sm border-0" style="background-color: #ffc107; color: #2b303a;">
+                        <i class="bi bi-folder-plus me-1"></i>Create Target Group
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body bg-white p-4">
+                <div class="document-reconstruction" style="line-height: 1.7; font-size: 1.05rem; font-family: Georgia, serif; color: #2b303a;">
+                    {% if elements %}
+                        {% for el in elements %}
+                            {% if el.is_continuation %}
+                                <!-- Skip rendering continuation elements as they are already rendered inside the parent requirement card -->
+                            {% elif el.classification == 'section_heading' %}
+                                <!-- Section Heading Element -->
+                                <h4 class="mt-4 mb-2 text-dark font-weight-bold border-bottom pb-1" style="font-family: inherit;">
+                                    {{ el.raw_text }}
+                                </h4>
+                            {% elif el.classification == 'requirement' %}
+                                <!-- Requirement Element Start (Highlighted) -->
+                                <div class="my-3 p-3 rounded" style="background-color: #fff9e6; border-left: 5px solid #ffc107; font-family: system-ui, -apple-system, sans-serif;">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <div class="d-flex align-items-center">
+                                            <input form="group-form" class="form-check-input me-2 border-warning" type="checkbox" name="requirement_ids" value="{{ el.requirement_info.id }}" id="req-chk-{{ el.requirement_info.id }}" style="cursor: pointer; transform: scale(1.15);">
+                                            <label class="form-check-label badge bg-warning text-dark font-weight-bold" for="req-chk-{{ el.requirement_info.id }}" style="cursor: pointer;">
+                                                R{{ el.requirement_info.global_number }} (Local #{{ el.requirement_info.source_number }}) {{ el.requirement_info.srs_id }}
+                                            </label>
+                                        </div>
+                                        <div class="d-flex align-items-center">
+                                            <!-- Single Requirement Shortcut Form -->
+                                            <form action="{{ url_for('create_group', doc_id=document.id) }}" method="POST" style="display: inline;">
+                                                <input type="hidden" name="section_number" value="{{ selected_section.number }}">
+                                                <input type="hidden" name="requirement_ids" value="{{ el.requirement_info.id }}">
+                                                <button type="submit" class="btn btn-link btn-sm text-decoration-none text-success p-0 me-3 font-weight-bold border-0 bg-transparent" style="font-size: 0.9rem;">
+                                                    [Analyze Single]
+                                                </button>
+                                            </form>
+                                            <small class="text-muted">Page {{ el.page_number }}</small>
+                                        </div>
+                                    </div>
+                                    <div class="requirement-text font-weight-bold">
+                                        {{ el.requirement_info.normalized_text }}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <!-- Regular Document Paragraph -->
+                                <p class="mb-3 text-secondary" style="text-align: justify;">
+                                    {{ el.raw_text }}
+                                </p>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted italic">This section has no body elements.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Requirements Audit Table -->
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="card-title mb-0"><i class="bi bi-list-check text-success me-2"></i>Requirements Registry for Section {{ selected_section.number }}</h5>
+            </div>
+            <div class="card-body bg-white p-0">
+                {% if section_requirements %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th class="ps-4">Global #</th>
+                                <th>Source #</th>
+                                <th>SRS ID</th>
+                                <th>Requirement Text</th>
+                                <th class="pe-4">Page</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for req in section_requirements %}
+                            <tr>
+                                <td class="ps-4 font-weight-bold text-success">R{{ req.global_number }}</td>
+                                <td>#{{ req.source_number }}</td>
+                                <td><span class="badge bg-primary">{{ req.srs_id }}</span></td>
+                                <td style="max-width: 400px;" class="text-wrap">{{ req.normalized_text }}</td>
+                                <td class="pe-4">{{ req.page_number }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No explicit requirements identified in this section.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

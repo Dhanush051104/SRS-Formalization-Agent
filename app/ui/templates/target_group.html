@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-success text-decoration-none">Documents</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('document', doc_id=document.id, section=target_group.section_number) }}" class="text-success text-decoration-none">{{ document.filename }}</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Target Group #{{ target_group.id }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Alert Messaging -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col-12">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show shadow-sm" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <!-- Target Group Panel -->
+        <div class="col-12 col-xl-8">
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="card-title mb-0 text-dark"><i class="bi bi-folder-symlink-fill text-success me-2"></i>TARGET GROUP #{{ target_group.id }}</h4>
+                        <span class="badge bg-success mt-2" style="font-size: 0.9rem; padding: 0.5em 0.75em;">{{ target_group.status }}</span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <form action="{{ url_for('cancel_group', group_id=target_group.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to cancel and delete this target group?');">
+                            <button type="submit" class="btn btn-outline-danger btn-sm font-weight-bold">
+                                <i class="bi bi-trash me-1"></i>Cancel Group
+                            </button>
+                        </form>
+                        <a href="{{ url_for('document', doc_id=document.id, section=target_group.section_number) }}" class="btn btn-outline-secondary btn-sm font-weight-bold">
+                            <i class="bi bi-arrow-left me-1"></i>Back to Document
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body p-4 bg-white">
+                    <div class="mb-4">
+                        <h6 class="text-uppercase text-muted small font-weight-bold mb-1">Target Section</h6>
+                        <h5 class="text-dark font-weight-bold">
+                            {{ target_group.section_number }} - {{ section_title }}
+                        </h5>
+                    </div>
+
+                    <div class="mb-2">
+                        <h6 class="text-uppercase text-muted small font-weight-bold mb-3">Requirements in Group (Selection Order)</h6>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped mb-0 align-middle border">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3" style="width: 100px;">Global #</th>
+                                        <th style="width: 100px;">Source #</th>
+                                        <th style="width: 120px;">SRS ID</th>
+                                        <th>Requirement Text</th>
+                                        <th style="width: 80px;">Page</th>
+                                        <th class="pe-3 text-end" style="width: 100px;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for req in target_group.requirements %}
+                                    <tr>
+                                        <td class="ps-3 font-weight-bold text-success">R{{ req.global_number }}</td>
+                                        <td>#{{ req.source_number }}</td>
+                                        <td><span class="badge bg-primary">{{ req.srs_id }}</span></td>
+                                        <td class="text-wrap" style="max-width: 400px; font-family: system-ui, -apple-system, sans-serif;">
+                                            {{ req.normalized_text }}
+                                        </td>
+                                        <td>{{ req.page_number }}</td>
+                                        <td class="pe-3 text-end">
+                                            <form action="{{ url_for('remove_requirement', group_id=target_group.id, req_id=req.id) }}" method="POST" style="display: inline;">
+                                                <button type="submit" class="btn btn-outline-danger btn-sm px-2 py-1" style="font-size: 0.85rem;" title="Remove from Group">
+                                                    <i class="bi bi-x-circle"></i> Remove
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Future Pipeline Sidebar -->
+        <div class="col-12 col-xl-4">
+            <div class="card shadow-sm border-0 bg-light">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h5 class="card-title mb-0 text-dark"><i class="bi bi-cpu-fill text-success me-2"></i>Analysis Pipeline</h5>
+                </div>
+                <div class="card-body p-4">
+                    <p class="text-secondary small">
+                        This target group acts as the configuration boundary for the future AI Analyst Model.
+                    </p>
+                    <div class="d-grid gap-2 mt-4">
+                        <button class="btn btn-success font-weight-bold" disabled>
+                            <i class="bi bi-play-circle me-1"></i>Begin Formalization
+                        </button>
+                        <small class="text-muted text-center italic" style="font-size: 0.8rem;">
+                            (Analyst pipeline not implemented yet)
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

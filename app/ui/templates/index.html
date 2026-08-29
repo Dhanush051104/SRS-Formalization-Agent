@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - SRS Formalization Agent{% endblock %}
+
+{% block content %}
+<div class="row my-4">
+    <div class="col-md-8 mx-auto">
+        <!-- Banner/Intro -->
+        <div class="card mb-4 shadow-sm border-0">
+            <div class="card-body bg-light p-5 rounded">
+                <h1 class="display-5 text-success font-weight-bold">Ingestion Dashboard</h1>
+                <p class="lead">Upload and browse Software Requirements Specification (SRS) documents losslessly. The system parses document structure, builds section hierarchies, and identifies SRS requirements, preserving all original content for auditability.</p>
+                <hr class="my-4">
+                <p>Upload a new PDF or Word document (.pdf / .docx) to import it into the SQLite canonical store.</p>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0"><i class="bi bi-file-earmark-arrow-up-fill me-2"></i>Upload SRS Document</h5>
+            </div>
+            <div class="card-body">
+                <form action="/upload" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="srsFile" class="form-label">Select PDF or DOCX file</label>
+                        <input class="form-control" type="file" id="srsFile" name="srs_file" accept=".pdf,.docx" required>
+                    </div>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-cloud-upload-fill me-2"></i>Upload & Ingest</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Ingested Documents List -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <h5 class="card-title mb-0"><i class="bi bi-database-fill-check me-2"></i>Ingested Documents in SQLite Store</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if documents %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th class="px-4">Filename</th>
+                                <th>Uploaded At</th>
+                                <th>Recommendation</th>
+                                <th class="text-end px-4">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for doc in documents %}
+                            <tr>
+                                <td class="px-4 font-weight-bold">
+                                    <i class="bi bi-file-pdf-fill text-danger me-2"></i>{{ doc.filename }}
+                                </td>
+                                <td>{{ doc.uploaded_at | replace("T", " ") | slice(0, 19) }}</td>
+                                <td>
+                                    {% if doc.recommended_section %}
+                                    <span class="badge bg-success">
+                                        Recommend: {{ doc.recommended_section }}
+                                    </span>
+                                    <small class="text-muted d-block mt-1">
+                                        {{ doc.recommended_title }} ({{ doc.recommended_req_count }} reqs)
+                                    </small>
+                                    {% else %}
+                                    <span class="badge bg-secondary">No recommendations</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end px-4">
+                                    <a href="/document/{{ doc.id }}" class="btn btn-outline-success btn-sm">
+                                        <i class="bi bi-eye-fill me-1"></i>Browse SRS
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-5 text-center text-muted">
+                    <i class="bi bi-folder-x display-4 mb-3 d-block"></i>
+                    <p class="mb-0">No documents uploaded yet. Upload a document above to get started.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
