@@ -97,11 +97,14 @@ To maintain integrity, the system divides execution into a **deterministic found
 
 ---
 
-## 3. Swap-Ready Model Plugin Interfaces
+## 3. Planned Model Plugin Interfaces (Planned for Milestone 3)
 
-To make the AI layers interchangeable, the project uses Abstract Base Classes (ABCs) in Python. Models can be swapped between local APIs, cloud services, or mocks without affecting the orchestrator.
+To make the AI layers interchangeable in the future, the project will define Python Abstract Base Classes (ABCs). Models will be swapped between local APIs, cloud services, or mocks without affecting the orchestrator.
 
-### Analyst Model Interface
+> [!NOTE]
+> The interfaces below are **planned architectural examples** and are not yet defined in the Python codebase. They will be introduced in Milestone 3.
+
+### Planned Analyst Model Interface Example
 ```python
 class AbstractAnalystModel:
     def analyze_requirements(self, target_requirements: list[dict], context: dict) -> dict:
@@ -114,7 +117,7 @@ class AbstractAnalystModel:
 - **Remote implementation:** Queries a cloud GPU provider (e.g. Vast.ai, RunPod, or a standard LLM endpoint).
 - **Mock implementation:** Returns hardcoded dependencies for validation tests.
 
-### Reasoning Model Interface
+### Planned Reasoning Model Interface Example
 ```python
 class AbstractReasoningModel:
     def formalize_requirements(self, target_requirements: list[dict], context: dict) -> str:
