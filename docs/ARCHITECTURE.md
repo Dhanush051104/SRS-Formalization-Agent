@@ -18,42 +18,21 @@ To maintain integrity, the system divides execution into a **deterministic found
 ## 2. Layer-by-Layer Responsibilities
 
 ```
-    +-------------------------------------------+
-    |               User / Web UI               |
-    +-------------------------------------------+
-                          |
-                          v
-    +-------------------------------------------+
-    |              Document Parser              | (Deterministic)
-    +-------------------------------------------+
-                          |
-                          v
-    +-------------------------------------------+
-    |            Document Structurer            | (Deterministic)
-    +-------------------------------------------+
-                          |
-                          v
-    +-------------------------------------------+
-    |          SQLite Canonical Store           | (Deterministic)
-    +-------------------------------------------+
-                          |
-                          v
-    +-------------------------------------------+
-    |        Target Requirement / Group         | (Deterministic Boundary)
-    +-------------------------------------------+
-                          |
-                          v
-    +-------------------------------------------+
-    |            Python Orchestrator            | (Control Loop)
-    +-------------------------------------------+
-                          |
-       +------------------+------------------+
-       |                                     |
-       v                                     v
-+-------------+                       +-------------+
-|   Analyst   | (Probabilistic)       |  Reasoning  | (Probabilistic)
-|    Plugin   |                       |    Plugin   |
-+-------------+                       +-------------+
+                    Target Requirement / Target Group
+                                   │
+                         ┌─────────┴─────────┐
+                         ▼                   ▼
+                  SQLiteRetriever     ObsidianRetriever
+                         │                   │
+                         └─────────┬─────────┘
+                                   ▼
+                            ContextBuilder
+                                   │
+                                   ▼
+                            ContextPackage
+                                   │
+                                   ▼
+                           Future Reasoning Model
 ```
 
 ### 1. Document Parser (IMPLEMENTED)
@@ -77,20 +56,34 @@ To maintain integrity, the system divides execution into a **deterministic found
 - **Responsibility:** Provides the UI and service boundary where developers or users select specific requirements to form an analysis target.
 - **Traceability:** Enforces database uniqueness constraints, validates selection parameters, and maps group membership back to canonical requirements.
 
-### 6. Python Orchestrator (IN PROGRESS)
-- **Responsibility:** Runs the core loop. It accepts a target group, fetches the required context and dependencies from SQLite, manages history, calls the plugins, and drives the workflow.
+### 6. SQLite Retriever (`SQLiteRetriever`) (IMPLEMENTED)
+- **Responsibility:** Deterministic Python component (`app/retrieval/sqlite_retriever.py`) that queries canonical SRS requirement contexts, metadata, and sections directly from `srs_canonical.db`.
+- **Key Principles:** Preserves canonical raw requirement text character-for-character without inference.
 
-### 7. Analyst Model (PLANNED)
-- **Responsibility:** Swappable plugin. Analyzes the target requirements, determines external dependencies (e.g., helper functions, variables defined in other sections), and requests the orchestrator to retrieve context.
+### 7. Obsidian Knowledge Retrieval Layer (`ObsidianRetriever`) (IMPLEMENTED)
+- **Responsibility:** Deterministic Python component (`app/retrieval/obsidian_retriever.py`) that loads engineering, domain, and formalization knowledge from `SRS-Knowledge/`.
+- **Key Principles:**
+  - Obsidian is treated strictly as a filesystem-based Markdown knowledge repository.
+  - Python does not communicate with the Obsidian GUI or application process.
+  - `Pattern-Registry.json` serves as the deterministic routing layer contract.
+  - Analyst pattern names are exact registry keys (no fuzzy matching).
 
-### 8. Retrieval / Context Manager (PLANNED)
-- **Responsibility:** Fetches the extra contextual information requested by the Analyst Model from the SQLite index and appends it to the prompt history.
+### 8. Context Builder (`ContextBuilder` & `ContextPackage`) (IMPLEMENTED)
+- **Responsibility:** Deterministic orchestrator (`app/retrieval/context_builder.py`) combining `SQLiteRetriever` and `ObsidianRetriever` outputs into a structured `ContextPackage`.
+- **Key Principles:**
+  - Preserves requirement input ordering and pattern input ordering.
+  - Maintains explicit, inspectable provenance tracking for SQLite databases/tables and Obsidian relative file paths.
+  - Does NOT contain low-level SQLite queries or Markdown parsing logic.
+  - Does NOT perform requirement interpretation, LLM prompting, or formalization generation.
 
-### 9. Reasoning Model (PLANNED)
-- **Responsibility:** Swappable plugin. Translates the target requirement and its gathered context into mathematical logic representations (LTL, predicates).
+### 9. Python Orchestrator (IN PROGRESS)
+- **Responsibility:** Runs the core loop. It accepts a target group, invokes `ContextBuilder`, manages history, calls model plugins, and drives the workflow.
 
-### 10. Classification / Validation (PLANNED)
-- **Responsibility:** Compiles and validates the generated formalization against the expected syntax, checking for contradictions or parsing errors.
+### 10. Analyst Model (PLANNED)
+- **Responsibility:** Swappable plugin. Analyzes target requirements and identifies applicable pattern names.
+
+### 11. Reasoning Model (PLANNED)
+- **Responsibility:** Swappable plugin. Translates `ContextPackage` data into mathematical logic specifications (LTL, predicates).
 
 ### 11. Output (PLANNED)
 - **Responsibility:** Exports the validated formalization (e.g., JSON schemas, TLA+ specifications, or logic files).
