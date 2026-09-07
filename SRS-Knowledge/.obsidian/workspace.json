@@ -1,0 +1,227 @@
+{
+  "main": {
+    "id": "6dd25d25baa4c35a",
+    "type": "split",
+    "children": [
+      {
+        "id": "a3497670bc1eee48",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e883a30a41c41ae3",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Requirements/req-srs010.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "req-srs010"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "b5a38d2dff4eb81c",
+    "type": "split",
+    "children": [
+      {
+        "id": "ff04f406f347424d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "6cd1c481db358e6e",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "8be5e59b26e205f1",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "dc4bcb277cc88f56",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "right": {
+    "id": "cc865c37987ae713",
+    "type": "split",
+    "children": [
+      {
+        "id": "a64687cebe8a4f9c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "605d01e697925118",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Welcome.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "cb1af1ad3d5c9ecf",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Welcome.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "04d32168821ed5c6",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "e5b7afe1ec8f89f5",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "7418d14320f080ff",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Welcome.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "e883a30a41c41ae3",
+  "lastOpenFiles": [
+    "Requirements/req-srs008.md",
+    "Requirements/req-srs195.md",
+    "Requirements/req-srs197.md",
+    "Concepts/concept-vehicle-modes.md",
+    "Formalization/form-set-theory-rules.md",
+    "Requirements/req-srs234.md",
+    "Patterns/pat-component-interaction.md",
+    "Requirements/req-srs194.md",
+    "Requirements/req-srs199.md",
+    "Patterns/pat-completion-barrier.md",
+    "Concepts/concept-50hz-timer-interrupt.md",
+    "Formalization/form-timed-ltl-rules.md",
+    "Index/Pattern-Index.md",
+    "Patterns/pat-sequential-dependency.md",
+    "Requirements/req-srs017.md",
+    "Patterns/pat-initialization.md",
+    "Patterns/pat-trigger-action.md",
+    "Welcome.md",
+    "pat-timed-ltl-rules.md",
+    "Requirements/req-srs178.md",
+    "Patterns/pat-failure-handling.md",
+    "Requirements/req-srs297.md",
+    "Requirements/req-srs296.md",
+    "Requirements/req-srs292.md",
+    "Requirements/req-srs243.md",
+    "Requirements/req-srs221.md",
+    "Requirements",
+    "Concepts",
+    "Formalization",
+    "Patterns",
+    "Index/Pattern-Registry.json",
+    "Index"
+  ]
+}

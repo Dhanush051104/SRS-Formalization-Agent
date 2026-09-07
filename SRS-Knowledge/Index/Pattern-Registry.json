@@ -1,0 +1,251 @@
+{
+  "Trigger -> Action": {
+    "id": "pat-trigger-action",
+    "pattern_file": "Patterns/pat-trigger-action.md",
+    "formalization_notes": [
+      "Formalization/form-ltl-syntax-grammar.md",
+      "Formalization/form-timed-ltl-rules.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-icp-handshake.md"
+    ]
+  },
+  "Sequential Dependency": {
+    "id": "pat-sequential-dependency",
+    "pattern_file": "Patterns/pat-sequential-dependency.md",
+    "formalization_notes": [
+      "Formalization/form-ltl-syntax-grammar.md",
+      "Formalization/form-api-specifications.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-icp-handshake.md"
+    ]
+  },
+  "Function / API Invocation": {
+    "id": "pat-api-invocation",
+    "pattern_file": "Patterns/pat-api-invocation.md",
+    "formalization_notes": [
+      "Formalization/form-api-specifications.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-rate-groups-tasks.md",
+      "Concepts/concept-vehicle-modes.md"
+    ]
+  },
+  "Initialization": {
+    "id": "pat-initialization",
+    "pattern_file": "Patterns/pat-initialization.md",
+    "formalization_notes": [
+      "Formalization/form-api-specifications.md",
+      "Formalization/form-metric-derivations.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-watchdog-timers.md"
+    ]
+  },
+  "Universal Quantification": {
+    "id": "pat-universal-quantification",
+    "pattern_file": "Patterns/pat-universal-quantification.md",
+    "formalization_notes": [
+      "Formalization/form-set-theory-rules.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-vmebus-ne-subsystem.md"
+    ]
+  },
+  "Cardinality / Threshold": {
+    "id": "pat-cardinality-threshold",
+    "pattern_file": "Patterns/pat-cardinality-threshold.md",
+    "formalization_notes": [
+      "Formalization/form-set-theory-rules.md",
+      "Formalization/form-metric-derivations.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-rate-groups-tasks.md",
+      "Concepts/concept-vehicle-modes.md"
+    ]
+  },
+  "Set Construction": {
+    "id": "pat-set-construction",
+    "pattern_file": "Patterns/pat-set-construction.md",
+    "formalization_notes": [
+      "Formalization/form-set-theory-rules.md",
+      "Formalization/form-fault-recovery.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-vmebus-ne-subsystem.md"
+    ]
+  },
+  "State Consistency / Equality": {
+    "id": "pat-state-consistency",
+    "pattern_file": "Patterns/pat-state-consistency.md",
+    "formalization_notes": [
+      "Formalization/form-set-theory-rules.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md"
+    ]
+  },
+  "Component Interaction": {
+    "id": "pat-component-interaction",
+    "pattern_file": "Patterns/pat-component-interaction.md",
+    "formalization_notes": [
+      "Formalization/form-api-specifications.md",
+      "Formalization/form-fault-recovery.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-vmebus-ne-subsystem.md",
+      "Concepts/concept-icp-handshake.md"
+    ]
+  },
+  "Handshake": {
+    "id": "pat-handshake",
+    "pattern_file": "Patterns/pat-handshake.md",
+    "formalization_notes": [
+      "Formalization/form-timed-ltl-rules.md",
+      "Formalization/form-api-specifications.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-icp-handshake.md"
+    ]
+  },
+  "Bounded Waiting": {
+    "id": "pat-bounded-waiting",
+    "pattern_file": "Patterns/pat-bounded-waiting.md",
+    "formalization_notes": [
+      "Formalization/form-timed-ltl-rules.md",
+      "Formalization/form-metric-derivations.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-icp-handshake.md",
+      "Concepts/concept-watchdog-timers.md"
+    ]
+  },
+  "Timeout / Deadline": {
+    "id": "pat-timeout-deadline",
+    "pattern_file": "Patterns/pat-timeout-deadline.md",
+    "formalization_notes": [
+      "Formalization/form-timed-ltl-rules.md",
+      "Formalization/form-metric-derivations.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-watchdog-timers.md",
+      "Concepts/concept-50hz-timer-interrupt.md"
+    ]
+  },
+  "Conditional Behavior": {
+    "id": "pat-conditional-behavior",
+    "pattern_file": "Patterns/pat-conditional-behavior.md",
+    "formalization_notes": [
+      "Formalization/form-ltl-syntax-grammar.md",
+      "Formalization/form-fault-recovery.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-vmebus-ne-subsystem.md"
+    ]
+  },
+  "Failure Handling": {
+    "id": "pat-failure-handling",
+    "pattern_file": "Patterns/pat-failure-handling.md",
+    "formalization_notes": [
+      "Formalization/form-fault-recovery.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-watchdog-timers.md",
+      "Concepts/concept-vmebus-ne-subsystem.md"
+    ]
+  },
+  "Fallback / Graceful Degradation": {
+    "id": "pat-graceful-degradation",
+    "pattern_file": "Patterns/pat-graceful-degradation.md",
+    "formalization_notes": [
+      "Formalization/form-fault-recovery.md",
+      "Formalization/form-set-theory-rules.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-vmebus-ne-subsystem.md"
+    ]
+  },
+  "Cross-Requirement Dependency": {
+    "id": "pat-cross-req-dependency",
+    "pattern_file": "Patterns/pat-cross-req-dependency.md",
+    "formalization_notes": [
+      "Formalization/form-ltl-syntax-grammar.md",
+      "Formalization/form-metric-derivations.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-icp-handshake.md",
+      "Concepts/concept-50hz-timer-interrupt.md"
+    ]
+  },
+  "Derived Mathematical Constraint": {
+    "id": "pat-derived-math-constraint",
+    "pattern_file": "Patterns/pat-derived-math-constraint.md",
+    "formalization_notes": [
+      "Formalization/form-metric-derivations.md",
+      "Formalization/form-set-theory-rules.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-fcp-fcr-architecture.md",
+      "Concepts/concept-rate-groups-tasks.md",
+      "Concepts/concept-vehicle-modes.md"
+    ]
+  },
+  "Lifecycle Boundary": {
+    "id": "pat-lifecycle-boundary",
+    "pattern_file": "Patterns/pat-lifecycle-boundary.md",
+    "formalization_notes": [
+      "Formalization/form-metric-derivations.md",
+      "Formalization/form-api-specifications.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-50hz-timer-interrupt.md",
+      "Concepts/concept-fcp-fcr-architecture.md"
+    ]
+  },
+  "Completion Barrier": {
+    "id": "pat-completion-barrier",
+    "pattern_file": "Patterns/pat-completion-barrier.md",
+    "formalization_notes": [
+      "Formalization/form-ltl-syntax-grammar.md",
+      "Formalization/form-api-specifications.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-50hz-timer-interrupt.md",
+      "Concepts/concept-icp-handshake.md"
+    ]
+  },
+  "Multiple Simultaneous Actions": {
+    "id": "pat-simultaneous-actions",
+    "pattern_file": "Patterns/pat-simultaneous-actions.md",
+    "formalization_notes": [
+      "Formalization/form-ltl-syntax-grammar.md",
+      "Formalization/form-api-specifications.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-rate-groups-tasks.md",
+      "Concepts/concept-50hz-timer-interrupt.md"
+    ]
+  },
+  "Periodic / Timer-Driven Behavior": {
+    "id": "pat-periodic-behavior",
+    "pattern_file": "Patterns/pat-periodic-behavior.md",
+    "formalization_notes": [
+      "Formalization/form-timed-ltl-rules.md",
+      "Formalization/form-metric-derivations.md"
+    ],
+    "concept_notes": [
+      "Concepts/concept-50hz-timer-interrupt.md",
+      "Concepts/concept-rate-groups-tasks.md"
+    ]
+  }
+}
