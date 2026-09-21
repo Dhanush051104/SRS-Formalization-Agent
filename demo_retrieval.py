@@ -11,6 +11,13 @@ project_root = Path(__file__).resolve().parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from app.analyst import (
+    AnalystError,
+    AnalystResult,
+    AnalystValidationError,
+    NonCanonicalPatternError,
+    OllamaAnalyst,
+)
 from app.retrieval import (
     ContextBuilder,
     ContextPackage,
@@ -23,21 +30,53 @@ from app.retrieval import (
 
 def run_demo() -> None:
     print("==========================================================")
-    print("      SRS FORMALIZATION AGENT — RETRIEVAL DEMO           ")
+    print("      SRS FORMALIZATION AGENT — ANALYST DEMO             ")
     print("==========================================================")
     print()
 
-    requirement_ids = [5]
-    pattern_names = [
-        "Timeout / Deadline",
-        "Bounded Waiting",
-        "Failure Handling",
-        "Component Interaction",
-        "Cross-Requirement Dependency",
-    ]
+    target_requirement_id = 8  # Requirement R8 / [SRS178]
 
     try:
+        # 1. Retrieve canonical requirement context from SQLite
         sqlite_retriever = SQLiteRetriever()
+        req_context = sqlite_retriever.get_requirement_by_id(target_requirement_id)
+
+        print("----------------------------------------------------------")
+        print("2. TARGET REQUIREMENT")
+        print("----------------------------------------------------------")
+        print(f"  • Requirement ID:        {req_context.requirement_id}")
+        print(f"  • Global Number:         R{req_context.global_number}")
+        print(f"  • SRS ID:                {req_context.srs_id}")
+        print(f"  • Section Number:        {req_context.section_number}")
+        print(f"  • Section Title:         {req_context.section_title or 'N/A'}")
+        print(f"  • Exact Raw Text:\n    \"{req_context.raw_text}\"")
+        print()
+
+        # 2. Invoke local Llama 3 Analyst Model via Ollama
+        print("Running Llama 3 Analyst Model via Ollama...")
+        analyst = OllamaAnalyst(model="llama3:latest")
+        
+        analyst_result: AnalystResult = analyst.analyze(req_context)
+
+        print("----------------------------------------------------------")
+        print("3. PATTERNS IDENTIFIED BY LLAMA 3 ANALYST MODEL")
+        print("----------------------------------------------------------")
+        if not analyst_result.identified_patterns:
+            print("  (No canonical patterns identified for this requirement)")
+        else:
+            for idx, name in enumerate(analyst_result.identified_patterns, 1):
+                evidence = analyst_result.evidence.get(name, "No evidence provided")
+                print(f"  {idx}. {name}")
+                print(f"     Evidence: \"{evidence}\"")
+
+        if analyst_result.missing_information:
+            print()
+            print("  [Missing Information / Ambiguities Flagged]:")
+            for item in analyst_result.missing_information:
+                print(f"    - {item}")
+        print()
+
+        # 3. Supply identified patterns into ContextBuilder to retrieve Obsidian knowledge
         obsidian_retriever = ObsidianRetriever()
         builder = ContextBuilder(
             sqlite_retriever=sqlite_retriever,
@@ -45,29 +84,11 @@ def run_demo() -> None:
         )
 
         package: ContextPackage = builder.build(
-            requirement_ids=requirement_ids,
-            pattern_names=pattern_names,
+            requirement_ids=[req_context.requirement_id],
+            pattern_names=analyst_result.identified_patterns,
         )
 
-        print("----------------------------------------------------------")
-        print("2. TARGET REQUIREMENT")
-        print("----------------------------------------------------------")
-        for req in package.requirements:
-            print(f"  • Requirement ID:        {req.requirement_id}")
-            print(f"  • Global Number:         R{req.global_number}")
-            print(f"  • SRS ID:                {req.srs_id}")
-            print(f"  • Section Number:        {req.section_number}")
-            print(f"  • Section Title:         {req.section_title}")
-            print(f"  • Exact Raw Text:\n    \"{req.raw_text}\"")
-            print()
-
-        print("----------------------------------------------------------")
-        print("3. DEMO PATTERN INPUT (PATTERNS PROVIDED TO RETRIEVAL LAYER)")
-        print("----------------------------------------------------------")
-        for idx, name in enumerate(package.identified_patterns, 1):
-            print(f"  {idx}. {name}")
-        print()
-
+        # 4. Display retrieved Obsidian knowledge
         print("----------------------------------------------------------")
         print("4. RETRIEVED OBSIDIAN KNOWLEDGE")
         print("----------------------------------------------------------")
@@ -84,6 +105,7 @@ def run_demo() -> None:
             print(f"    - Concept Notes:       {', '.join(concept_paths) if concept_paths else 'None'}")
             print()
 
+        # 5. Display ContextPackage summary
         print("----------------------------------------------------------")
         print("5. CONTEXTPACKAGE SUMMARY")
         print("----------------------------------------------------------")
@@ -93,6 +115,7 @@ def run_demo() -> None:
         print(f"  • Read Cache Hits:        {obs_res.read_cache_hits}")
         print()
 
+        # 6. Display provenance
         print("----------------------------------------------------------")
         print("6. PROVENANCE")
         print("----------------------------------------------------------")
@@ -100,18 +123,22 @@ def run_demo() -> None:
         print()
 
         print("==========================================================")
-        print("✓ CONTEXTPACKAGE SUCCESSFULLY ASSEMBLED")
+        print("✓ CONTEXTPACKAGE SUCCESSFULLY ASSEMBLED VIA ANALYST MODEL")
         print("✓ READY TO BE PROVIDED TO THE FUTURE REASONING MODEL")
         print("==========================================================")
 
+    except (AnalystError, AnalystValidationError, NonCanonicalPatternError) as e:
+        print(f"\n[ERROR] Analyst Model Error: {e}")
+        print("Notice: The live Analyst demo requires Ollama daemon running with model 'llama3:latest'.")
+        sys.exit(1)
     except SQLiteRetrieverError as e:
-        print(f"[ERROR] SQLite Retrieval Error encountered: {e}")
+        print(f"\n[ERROR] SQLite Retrieval Error: {e}")
         sys.exit(1)
     except ObsidianRetrieverError as e:
-        print(f"[ERROR] Obsidian Retrieval Error encountered: {e}")
+        print(f"\n[ERROR] Obsidian Retrieval Error: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected Error encountered: {e}")
+        print(f"\n[ERROR] Unexpected Error: {e}")
         sys.exit(1)
 
 

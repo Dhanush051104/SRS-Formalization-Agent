@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Requirements/req-srs010.md",
+                "file": "Index/Pattern-Index.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "req-srs010"
+              "title": "Pattern-Index"
             }
           }
         ]
@@ -191,6 +191,7 @@
   },
   "active": "e883a30a41c41ae3",
   "lastOpenFiles": [
+    "Requirements/req-srs010.md",
     "Requirements/req-srs008.md",
     "Requirements/req-srs195.md",
     "Requirements/req-srs197.md",
@@ -216,7 +217,6 @@
     "Requirements/req-srs296.md",
     "Requirements/req-srs292.md",
     "Requirements/req-srs243.md",
-    "Requirements/req-srs221.md",
     "Requirements",
     "Concepts",
     "Formalization",

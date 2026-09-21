@@ -18,21 +18,29 @@ To maintain integrity, the system divides execution into a **deterministic found
 ## 2. Layer-by-Layer Responsibilities
 
 ```
-                    Target Requirement / Target Group
-                                   │
-                         ┌─────────┴─────────┐
-                         ▼                   ▼
-                  SQLiteRetriever     ObsidianRetriever
-                         │                   │
-                         └─────────┬─────────┘
-                                   ▼
-                            ContextBuilder
-                                   │
-                                   ▼
-                            ContextPackage
-                                   │
-                                   ▼
-                           Future Reasoning Model
+                          Target Requirement / Target Group
+                                         │
+                                         ▼
+                                  SQLiteRetriever
+                                         │
+                                         ▼
+                                 RequirementContext
+                                         │
+                                         ▼
+                             AnalystModel (OllamaAnalyst)
+                                         │
+                                         ▼
+                                   AnalystResult
+                             (identified pattern names)
+                                         │
+                                         ▼
+                                   ContextBuilder ◄─── ObsidianRetriever (via Pattern-Registry.json)
+                                         │
+                                         ▼
+                                   ContextPackage
+                                         │
+                                         ▼
+                               Future Reasoning Model
 ```
 
 ### 1. Document Parser (IMPLEMENTED)
@@ -57,10 +65,19 @@ To maintain integrity, the system divides execution into a **deterministic found
 - **Traceability:** Enforces database uniqueness constraints, validates selection parameters, and maps group membership back to canonical requirements.
 
 ### 6. SQLite Retriever (`SQLiteRetriever`) (IMPLEMENTED)
-- **Responsibility:** Deterministic Python component (`app/retrieval/sqlite_retriever.py`) that queries canonical SRS requirement contexts, metadata, and sections directly from `srs_canonical.db`.
+- **Responsibility:** Deterministic Python component (`app/retrieval/sqlite_retriever.py`) that queries canonical SRS requirement contexts (`RequirementContext`), metadata, and sections directly from `srs_canonical.db`.
 - **Key Principles:** Preserves canonical raw requirement text character-for-character without inference.
 
-### 7. Obsidian Knowledge Retrieval Layer (`ObsidianRetriever`) (IMPLEMENTED)
+### 7. Analyst Model (`AnalystModel` & `OllamaAnalyst`) (IMPLEMENTED)
+- **Responsibility:** Pluggable AI layer (`app/analyst/`) analyzing `RequirementContext` instances using local Llama 3 via Ollama (`OllamaAnalyst`) to classify structural engineering patterns.
+- **Key Principles:**
+  - Pluggable abstract base class interface (`AnalystModel(ABC)`).
+  - Uses fixed, versioned prompt architecture (`ANALYST_SYSTEM_PROMPT`).
+  - Loads canonical pattern names dynamically from `SRS-Knowledge/Index/Pattern-Registry.json`.
+  - Strictly validates output schema (`AnalystResult`), verifying requirement identity matching, pattern uniqueness, and exact pattern name matching against the catalog (raises `NonCanonicalPatternError` for unrecognized patterns).
+  - Does NOT perform final formalization or code generation.
+
+### 8. Obsidian Knowledge Retrieval Layer (`ObsidianRetriever`) (IMPLEMENTED)
 - **Responsibility:** Deterministic Python component (`app/retrieval/obsidian_retriever.py`) that loads engineering, domain, and formalization knowledge from `SRS-Knowledge/`.
 - **Key Principles:**
   - Obsidian is treated strictly as a filesystem-based Markdown knowledge repository.
@@ -68,57 +85,42 @@ To maintain integrity, the system divides execution into a **deterministic found
   - `Pattern-Registry.json` serves as the deterministic routing layer contract.
   - Analyst pattern names are exact registry keys (no fuzzy matching).
 
-### 8. Context Builder (`ContextBuilder` & `ContextPackage`) (IMPLEMENTED)
+### 9. Context Builder (`ContextBuilder` & `ContextPackage`) (IMPLEMENTED)
 - **Responsibility:** Deterministic orchestrator (`app/retrieval/context_builder.py`) combining `SQLiteRetriever` and `ObsidianRetriever` outputs into a structured `ContextPackage`.
 - **Key Principles:**
   - Preserves requirement input ordering and pattern input ordering.
+  - Accepts `AnalystResult.identified_patterns` to build the complete `ContextPackage`.
   - Maintains explicit, inspectable provenance tracking for SQLite databases/tables and Obsidian relative file paths.
-  - Does NOT contain low-level SQLite queries or Markdown parsing logic.
-  - Does NOT perform requirement interpretation, LLM prompting, or formalization generation.
 
-### 9. Python Orchestrator (IN PROGRESS)
-- **Responsibility:** Runs the core loop. It accepts a target group, invokes `ContextBuilder`, manages history, calls model plugins, and drives the workflow.
-
-### 10. Analyst Model (PLANNED)
-- **Responsibility:** Swappable plugin. Analyzes target requirements and identifies applicable pattern names.
-
-### 11. Reasoning Model (PLANNED)
+### 10. Reasoning Model (PLANNED)
 - **Responsibility:** Swappable plugin. Translates `ContextPackage` data into mathematical logic specifications (LTL, predicates).
 
-### 11. Output (PLANNED)
-- **Responsibility:** Exports the validated formalization (e.g., JSON schemas, TLA+ specifications, or logic files).
+### 11. Critic Model & Clarification Manager (PLANNED)
+- **Responsibility:** Swappable plugin and control loop for verifying mathematical formalizations and managing interactive user clarification dialogues.
 
 ---
 
-## 3. Planned Model Plugin Interfaces (Planned for Milestone 3)
+## 3. Implemented & Planned Model Plugin Interfaces
 
-To make the AI layers interchangeable in the future, the project will define Python Abstract Base Classes (ABCs). Models will be swapped between local APIs, cloud services, or mocks without affecting the orchestrator.
+To make the AI layers interchangeable, the project defines Python Abstract Base Classes (ABCs). Models can be swapped between local APIs, cloud services, or mocks without affecting the orchestrator or retrieval layer.
 
-> [!NOTE]
-> The interfaces below are **planned architectural examples** and are not yet defined in the Python codebase. They will be introduced in Milestone 3.
-
-### Planned Analyst Model Interface Example
+### Implemented Analyst Model Interface (`app/analyst/analyst_model.py`)
 ```python
-class AbstractAnalystModel:
-    def analyze_requirements(self, target_requirements: list[dict], context: dict) -> dict:
-        """
-        Analyze requirements to determine needed context, variables, and dependencies.
-        """
-        raise NotImplementedError
+class AnalystModel(ABC):
+    @abstractmethod
+    def analyze(self, requirement_context: RequirementContext) -> AnalystResult:
+        """Analyze a RequirementContext and return a validated AnalystResult."""
+        pass
 ```
-- **Local implementation:** Calls a local model running in Ollama or Hugging Face.
-- **Remote implementation:** Queries a cloud GPU provider (e.g. Vast.ai, RunPod, or a standard LLM endpoint).
-- **Mock implementation:** Returns hardcoded dependencies for validation tests.
+- **Ollama implementation:** [`OllamaAnalyst`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/app/analyst/ollama_analyst.py) using `llama3:latest` and JSON mode.
+- **Mock implementation:** Used in [`tests/test_analyst_model.py`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/test_analyst_model.py) for fast, offline deterministic testing.
 
-### Planned Reasoning Model Interface Example
+### Planned Reasoning Model Interface (Planned for Milestone 4)
 ```python
-class AbstractReasoningModel:
-    def formalize_requirements(self, target_requirements: list[dict], context: dict) -> str:
-        """
-        Translate requirements and context into formal specifications.
-        """
-        raise NotImplementedError
+class AbstractReasoningModel(ABC):
+    @abstractmethod
+    def formalize_requirements(self, context_package: ContextPackage) -> str:
+        """Translate ContextPackage into formal specifications (LTL, predicates)."""
+        pass
 ```
-- **Local implementation:** Runs a local reasoning LLM model.
-- **Remote implementation:** Calls a remote GPU reasoning endpoint.
-- **Mock implementation:** Returns pre-defined LTL statements for unit testing.
+
