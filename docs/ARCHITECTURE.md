@@ -40,7 +40,21 @@ To maintain integrity, the system divides execution into a **deterministic found
                                    ContextPackage
                                          │
                                          ▼
-                               Future Reasoning Model
+                            ReasoningModel (OllamaReasoning)
+                                         │
+                                         ▼
+                                  ReasoningResult
+                         (LTL, predicates, entities, bounds)
+                                         │
+                                         ▼
+                             CriticModel (OllamaCritic)
+                                         │
+                                         ▼
+                                   CriticResult
+                  (status, findings, missing constraints, summary)
+                                         │
+                                         ▼
+                             Future Revision Loop (M6)
 ```
 
 ### 1. Document Parser (IMPLEMENTED)
@@ -92,11 +106,22 @@ To maintain integrity, the system divides execution into a **deterministic found
   - Accepts `AnalystResult.identified_patterns` to build the complete `ContextPackage`.
   - Maintains explicit, inspectable provenance tracking for SQLite databases/tables and Obsidian relative file paths.
 
-### 10. Reasoning Model (PLANNED)
-- **Responsibility:** Swappable plugin. Translates `ContextPackage` data into mathematical logic specifications (LTL, predicates).
+### 10. Reasoning Model (`ReasoningModel` & `OllamaReasoning`) (IMPLEMENTED)
+- **Responsibility:** Pluggable AI formalization layer (`app/reasoning/`) analyzing `ContextPackage` payloads to translate SRS requirements and retrieved Obsidian knowledge into candidate mathematical formalizations (LTL expressions, predicates, metric bounds, state consistency equations).
+- **Key Principles:**
+  - Pluggable abstract base class interface (`ReasoningModel(ABC)`).
+  - Uses fixed, versioned prompt architecture (`REASONING_SYSTEM_PROMPT`).
+  - Source fidelity enforcement: preserves exact parameters (e.g., 2.5 seconds), avoids inventing technical bounds, explicitly captures assumptions and unstated/missing parameters under `unresolved_items`.
+  - Strictly validates output schema (`ReasoningResult`), verifying requirement identity matching and list structure validation.
 
-### 11. Critic Model & Clarification Manager (PLANNED)
-- **Responsibility:** Swappable plugin and control loop for verifying mathematical formalizations and managing interactive user clarification dialogues.
+### 11. Critic / Validation Model (`CriticModel` & `OllamaCritic`) (IMPLEMENTED)
+- **Responsibility:** Independent AI verification layer (`app/critic/`) comparing candidate `ReasoningResult` outputs against authoritative `ContextPackage` inputs to evaluate timing preservation, actor/action fidelity, pattern coverage, assumption validity, missing constraints, contradictions, and traceability.
+- **Key Principles:**
+  - Pluggable abstract base class interface (`CriticModel(ABC)`).
+  - Uses fixed, versioned prompt architecture (`CRITIC_SYSTEM_PROMPT`).
+  - Produces structured explainable findings (`CriticFinding`) with category, severity (`INFO`, `WARNING`, `ERROR`), evidence quotes, and revision recommendations.
+  - Assigns verdict status: `PASS`, `NEEDS_REVISION`, or `BLOCKED`.
+  - Independent of Reasoning Model (does NOT rewrite candidate results directly).
 
 ---
 
@@ -115,12 +140,27 @@ class AnalystModel(ABC):
 - **Ollama implementation:** [`OllamaAnalyst`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/app/analyst/ollama_analyst.py) using `llama3:latest` and JSON mode.
 - **Mock implementation:** Used in [`tests/test_analyst_model.py`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/test_analyst_model.py) for fast, offline deterministic testing.
 
-### Planned Reasoning Model Interface (Planned for Milestone 4)
+### Implemented Reasoning Model Interface (`app/reasoning/reasoning_model.py`)
 ```python
-class AbstractReasoningModel(ABC):
+class ReasoningModel(ABC):
     @abstractmethod
-    def formalize_requirements(self, context_package: ContextPackage) -> str:
-        """Translate ContextPackage into formal specifications (LTL, predicates)."""
+    def reason(self, context_package: ContextPackage) -> ReasoningResult:
+        """Process a ContextPackage and return a validated ReasoningResult."""
         pass
 ```
+- **Ollama implementation:** [`OllamaReasoning`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/app/reasoning/ollama_reasoning.py) using `llama3:latest` and JSON mode.
+- **Mock implementation:** Used in [`tests/test_reasoning_model.py`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/test_reasoning_model.py) for fast, offline deterministic testing.
+
+### Implemented Critic Model Interface (`app/critic/critic_model.py`)
+```python
+class CriticModel(ABC):
+    @abstractmethod
+    def critique(self, context_package: ContextPackage, reasoning_result: ReasoningResult) -> CriticResult:
+        """Critique a candidate ReasoningResult against the original ContextPackage and return a validated CriticResult."""
+        pass
+```
+- **Ollama implementation:** [`OllamaCritic`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/app/critic/ollama_critic.py) using `llama3:latest` and JSON mode.
+- **Mock implementation:** Used in [`tests/test_critic_model.py`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/test_critic_model.py) for fast, offline deterministic testing.
+
+
 
