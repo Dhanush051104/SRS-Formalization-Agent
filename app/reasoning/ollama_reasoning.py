@@ -44,13 +44,18 @@ class OllamaReasoning(ReasoningModel):
         else:
             self.client = ollama
 
-    def reason(self, context_package: ContextPackage) -> ReasoningResult:
+    def reason(
+        self,
+        context_package: ContextPackage,
+        user_prompt: Optional[str] = None,
+    ) -> ReasoningResult:
         """
         Processes a ContextPackage using Llama 3 via Ollama, parses the JSON response,
         validates metadata identity matching and structural constraints, and returns ReasoningResult.
 
         Args:
             context_package: ContextPackage instance containing SRS requirement data & Obsidian knowledge.
+            user_prompt: Optional customized user prompt (e.g. including Critic feedback during revision).
 
         Returns:
             Validated ReasoningResult instance.
@@ -64,7 +69,8 @@ class OllamaReasoning(ReasoningModel):
 
         # 1. Build system and user prompts
         system_prompt = REASONING_SYSTEM_PROMPT
-        user_prompt = build_reasoning_user_prompt(context_package)
+        if user_prompt is None:
+            user_prompt = build_reasoning_user_prompt(context_package)
 
         messages = [
             {"role": "system", "content": system_prompt},

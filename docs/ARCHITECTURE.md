@@ -40,21 +40,25 @@ To maintain integrity, the system divides execution into a **deterministic found
                                    ContextPackage
                                          │
                                          ▼
-                            ReasoningModel (OllamaReasoning)
+                            RevisionManager (Bounded Loop)
+                             ┌───────────┴───────────┐
+                             │                       ▼
+                             │            ReasoningModel (OllamaReasoning)
+                             │                       │
+                             │                       ▼
+                             │                ReasoningResult
+                             │                       │
+                             │                       ▼
+                             │            CriticModel (OllamaCritic)
+                             │                       │
+                             │                       ▼
+                             │                  CriticResult
+                             │             (PASS / NEEDS_REVISION / BLOCKED)
+                             └───────────────────────┘
                                          │
                                          ▼
-                                  ReasoningResult
-                         (LTL, predicates, entities, bounds)
-                                         │
-                                         ▼
-                             CriticModel (OllamaCritic)
-                                         │
-                                         ▼
-                                   CriticResult
-                  (status, findings, missing constraints, summary)
-                                         │
-                                         ▼
-                             Future Revision Loop (M6)
+                                   RevisionResult
+                      (final Reasoning/Critic results & history)
 ```
 
 ### 1. Document Parser (IMPLEMENTED)
@@ -123,6 +127,16 @@ To maintain integrity, the system divides execution into a **deterministic found
   - Assigns verdict status: `PASS`, `NEEDS_REVISION`, or `BLOCKED`.
   - Independent of Reasoning Model (does NOT rewrite candidate results directly).
 
+### 12. Revision Loop Orchestrator (`RevisionManager` & `RevisionResult`) (IMPLEMENTED)
+- **Responsibility:** Bounded automated loop orchestrator (`app/revision/`) executing iterative reasoning-critique cycles to refine candidate formalizations based on Critic feedback.
+- **Key Principles:**
+  - Pluggable orchestration taking `ReasoningModel` and `CriticModel` adapters.
+  - Bounded iteration counter (`max_iterations`, default 3).
+  - Iteration step: runs `ReasoningModel.reason(context_package, user_prompt=revision_prompt)` $\rightarrow$ `CriticModel.critique(context_package, reasoning_result)`.
+  - Termination conditions: immediate stop on `PASS` (status=`PASS`, termination_reason=`CRITIC_PASSED`) or `BLOCKED` (status=`BLOCKED`, termination_reason=`CRITIC_BLOCKED`).
+  - Reaches max iterations: status=`MAX_ITERATIONS`, termination_reason=`MAX_ITERATIONS_REACHED`.
+  - Maintains complete, inspectable iteration history (`RevisionHistoryEntry`).
+
 ---
 
 ## 3. Implemented & Planned Model Plugin Interfaces
@@ -144,7 +158,7 @@ class AnalystModel(ABC):
 ```python
 class ReasoningModel(ABC):
     @abstractmethod
-    def reason(self, context_package: ContextPackage) -> ReasoningResult:
+    def reason(self, context_package: ContextPackage, user_prompt: Optional[str] = None) -> ReasoningResult:
         """Process a ContextPackage and return a validated ReasoningResult."""
         pass
 ```
@@ -161,6 +175,17 @@ class CriticModel(ABC):
 ```
 - **Ollama implementation:** [`OllamaCritic`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/app/critic/ollama_critic.py) using `llama3:latest` and JSON mode.
 - **Mock implementation:** Used in [`tests/test_critic_model.py`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/test_critic_model.py) for fast, offline deterministic testing.
+
+### Implemented Revision Manager Interface (`app/revision/revision_manager.py`)
+```python
+class RevisionManager:
+    def run_revision_loop(self, context_package: ContextPackage) -> RevisionResult:
+        """Runs the bounded automated reasoning-critique revision loop for a ContextPackage."""
+        pass
+```
+- **Implementation:** [`RevisionManager`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/app/revision/revision_manager.py) orchestrating pluggable `ReasoningModel` and `CriticModel` adapters.
+- **Mock / Unit Testing:** Tested in [`tests/test_revision_manager.py`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/test_revision_manager.py) using mocked models for fast deterministic offline verification.
+
 
 
 

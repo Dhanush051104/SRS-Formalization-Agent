@@ -27,13 +27,12 @@ We built a parsing pipeline that extracts every text element from the source doc
 - **Traceability:** Requirements (identified by numbered statements containing `[SRSxxx]` tags) are parsed, keeping their original section, page number, raw text, and source element order.
 - **Interactive Section Browser:** An interactive Flask web UI allows users to view the parsed document section-by-section, check requirement counts, and read reconstructed source content.
 
-### Milestone 5: Critic / Validation Model
-We implemented the independent AI Critic layer verifying candidate `ReasoningResult` formalizations against authoritative `ContextPackage` inputs.
-- **Pluggable Critic Interface:** Abstract base class `CriticModel(ABC)` defining `critique(ContextPackage, ReasoningResult) -> CriticResult`.
-- **Local Ollama Adapter (`OllamaCritic`):** Uses local Llama 3 (`llama3:latest`) via Ollama with JSON mode (`format="json"`) to perform independent verification and critique.
-- **Explainable Findings & Verdict Status:** Produces structured explainable findings (`CriticFinding`) with category, severity (`INFO`, `WARNING`, `ERROR`), source/reasoning quotes, and actionable recommendations. Assigns verdict status: `PASS`, `NEEDS_REVISION`, or `BLOCKED`.
-- **Source-Fidelity Audit:** Evaluates timing preservation, actor/action fidelity, pattern coverage, assumption validity, missing constraints, contradictions, and traceability.
-- **End-to-End Automated Pipeline:** Full integration demonstrated end-to-end: `SRS -> SQLite -> AnalystModel -> Obsidian -> ContextPackage -> ReasoningModel -> CriticModel -> CriticResult`.
+### Milestone 6: Bounded Automated Revision Loop
+We implemented the `RevisionManager` orchestrating bounded iterative feedback cycles between `ReasoningModel` and `CriticModel`.
+- **Bounded Automated Loop:** Orchestrates `ReasoningModel.reason()` $\rightarrow$ `CriticModel.critique()` $\rightarrow$ check status $\rightarrow$ retry with structured Critic feedback prompt if `NEEDS_REVISION` up to `max_iterations` (default 3).
+- **Termination Safeguards:** Immediately halts loop on `PASS` (status=`PASS`, `CRITIC_PASSED`) or `BLOCKED` (status=`BLOCKED`, `CRITIC_BLOCKED`). Sets status=`MAX_ITERATIONS` (`MAX_ITERATIONS_REACHED`) if limit is hit without forcing `PASS`.
+- **Full History Provenance:** Captures every intermediate `ReasoningResult`, `CriticResult`, and revision prompt in `RevisionHistoryEntry` inside `RevisionResult`.
+- **Forwarding Feedback:** `build_revision_user_prompt` serializes original `ContextPackage`, candidate formalization, and full Critic findings (severities, descriptions, source/reasoning evidence, recommendations, missing constraints, unsupported assumptions) into the revision prompt.
 
 ---
 
@@ -44,15 +43,14 @@ Based on testing against the **NASA X-38 Software Requirements Specification (SR
 * **Real Sections Identified:** 107 sections (including Sections 1 and 2, which are represented in the tree even with 0 requirements).
 * **Section 3.2.1 System Initialization:** Confirmed to contain all 17 requirements (R1 to R17 / SRS194 to SRS015).
 * **Target Group Test Suite:** 13 unit tests verifying validations, selection order, and CRUD operations pass successfully.
-* **Full Agent Test Suite:** 89 offline deterministic unit tests + live Ollama Llama 3 integration tests pass cleanly.
+* **Full Agent Test Suite:** 96 offline deterministic unit tests + live Ollama Llama 3 integration tests pass cleanly.
 
 ---
 
-## 5. What Is Being Worked On Next (Milestone 6)
-We are currently entering the **Revision Loop, Clarification Manager & Final UI** phase:
-1. **Automated Revision Loop:** Re-feeding `CriticResult` feedback into the `ReasoningModel` to iterate until `PASS` or `BLOCKED`.
-2. **Clarification Manager:** Managing interactive clarification dialogues for unstated parameters or ambiguities.
-3. **Flask UI Integration:** Exposing the complete pipeline trace (Requirement $\rightarrow$ Analyst $\rightarrow$ Obsidian Knowledge $\rightarrow$ Reasoning Formalization $\rightarrow$ Critic Evaluation $\rightarrow$ Revision) in the Flask web interface.
+## 5. What Is Being Worked On Next (Milestone 7)
+We are currently entering the **Clarification Manager & Interactive UI Loop** phase:
+1. **Clarification Manager:** Managing interactive clarification dialogues when the Critic or Reasoning Model flags unstated parameters or un-resolvable ambiguities under `unresolved_items` or `BLOCKED` status.
+2. **Flask Web UI Integration:** Exposing the complete end-to-end trace (Requirement $\rightarrow$ Analyst $\rightarrow$ Obsidian Knowledge $\rightarrow$ Reasoning Formalization $\rightarrow$ Critic Evaluation $\rightarrow$ Revision Iteration History) in the interactive web interface.
 
 ---
 

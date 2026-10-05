@@ -76,12 +76,17 @@ class ReasoningModel(ABC):
             result.provenance = context_package.provenance
 
     @abstractmethod
-    def reason(self, context_package: ContextPackage) -> ReasoningResult:
+    def reason(
+        self,
+        context_package: ContextPackage,
+        user_prompt: Optional[str] = None,
+    ) -> ReasoningResult:
         """
         Processes a ContextPackage and returns a validated ReasoningResult.
 
         Args:
             context_package: ContextPackage instance containing SRS data and retrieved knowledge.
+            user_prompt: Optional customized user prompt (e.g. including Critic feedback during revision).
 
         Returns:
             Validated ReasoningResult instance.
