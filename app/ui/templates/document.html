@@ -136,6 +136,9 @@
                                                     [Analyze Single]
                                                 </button>
                                             </form>
+                                            <a href="{{ url_for('formalize_requirement', req_id=el.requirement_info.id) }}" class="btn btn-link btn-sm text-decoration-none text-primary p-0 me-3 font-weight-bold" style="font-size: 0.9rem;">
+                                                [Formalize]
+                                            </a>
                                             <small class="text-muted">Page {{ el.page_number }}</small>
                                         </div>
                                     </div>
@@ -172,7 +175,8 @@
                                 <th>Source #</th>
                                 <th>SRS ID</th>
                                 <th>Requirement Text</th>
-                                <th class="pe-4">Page</th>
+                                <th>Page</th>
+                                <th class="pe-4 text-end">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -182,7 +186,12 @@
                                 <td>#{{ req.source_number }}</td>
                                 <td><span class="badge bg-primary">{{ req.srs_id }}</span></td>
                                 <td style="max-width: 400px;" class="text-wrap">{{ req.normalized_text }}</td>
-                                <td class="pe-4">{{ req.page_number }}</td>
+                                <td>{{ req.page_number }}</td>
+                                <td class="pe-4 text-end">
+                                    <a href="{{ url_for('formalize_requirement', req_id=req.id) }}" class="btn btn-outline-success btn-sm py-1 px-2 font-weight-bold" style="font-size: 0.85rem;">
+                                        <i class="bi bi-play-circle me-1"></i>Formalize
+                                    </a>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

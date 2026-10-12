@@ -109,15 +109,21 @@
                 </div>
                 <div class="card-body p-4">
                     <p class="text-secondary small">
-                        This target group acts as the configuration boundary for the future AI Analyst Model.
+                        This target group establishes the scope for automated mathematical formalization.
                     </p>
                     <div class="d-grid gap-2 mt-4">
-                        <button class="btn btn-success font-weight-bold" disabled>
-                            <i class="bi bi-play-circle me-1"></i>Begin Formalization
-                        </button>
-                        <small class="text-muted text-center italic" style="font-size: 0.8rem;">
-                            (Analyst pipeline not implemented yet)
-                        </small>
+                        {% if target_group.requirements %}
+                            <a href="{{ url_for('formalize_requirement', req_id=target_group.requirements[0].id) }}" class="btn btn-success font-weight-bold">
+                                <i class="bi bi-play-circle-fill me-1"></i>Begin Formalization
+                            </a>
+                            <small class="text-muted text-center" style="font-size: 0.8rem;">
+                                Formalizes primary target: <strong>{{ target_group.requirements[0].srs_id }}</strong>
+                            </small>
+                        {% else %}
+                            <button class="btn btn-secondary font-weight-bold" disabled>
+                                <i class="bi bi-play-circle me-1"></i>No Requirements in Group
+                            </button>
+                        {% endif %}
                     </div>
                 </div>
             </div>

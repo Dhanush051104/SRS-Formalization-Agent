@@ -1,0 +1,208 @@
+{
+  "version": "1.0.0",
+  "description": "Authoritative canonical registry of mathematical, temporal, and domain symbols for SRS formalization.",
+  "symbols": [
+    {
+      "identifier": "sym_ltl_globally",
+      "spelling": "G",
+      "definition": "Linear Temporal Logic (LTL) Globally / Always operator: property must hold in all states along the execution path.",
+      "category": "TEMPORAL_OPERATOR",
+      "scope": "global",
+      "provenance": {
+        "source": "IEEE / Standard Linear Temporal Logic",
+        "reference": "Formalization-Temporal-Logic"
+      },
+      "version": "1.0.0",
+      "aliases": ["[]"],
+      "notes": "Unary temporal operator. Dual of F (Finally)."
+    },
+    {
+      "identifier": "sym_ltl_finally",
+      "spelling": "F",
+      "definition": "Linear Temporal Logic (LTL) Finally / Eventually operator: property must hold at some state along the execution path.",
+      "category": "TEMPORAL_OPERATOR",
+      "scope": "global",
+      "provenance": {
+        "source": "IEEE / Standard Linear Temporal Logic",
+        "reference": "Formalization-Temporal-Logic"
+      },
+      "version": "1.0.0",
+      "aliases": ["<>"],
+      "notes": "Unary temporal operator. Dual of G (Globally)."
+    },
+    {
+      "identifier": "sym_ltl_next",
+      "spelling": "X",
+      "definition": "Linear Temporal Logic (LTL) Next operator: property must hold at the immediate subsequent state.",
+      "category": "TEMPORAL_OPERATOR",
+      "scope": "global",
+      "provenance": {
+        "source": "IEEE / Standard Linear Temporal Logic",
+        "reference": "Formalization-Temporal-Logic"
+      },
+      "version": "1.0.0",
+      "aliases": ["O"],
+      "notes": "Unary temporal operator referring to next discrete time step."
+    },
+    {
+      "identifier": "sym_ltl_until",
+      "spelling": "U",
+      "definition": "Linear Temporal Logic (LTL) Strong Until operator: left operand must hold continuously until right operand becomes true, which must eventually occur.",
+      "category": "TEMPORAL_OPERATOR",
+      "scope": "global",
+      "provenance": {
+        "source": "IEEE / Standard Linear Temporal Logic",
+        "reference": "Formalization-Temporal-Logic"
+      },
+      "version": "1.0.0",
+      "aliases": [],
+      "notes": "Binary temporal operator."
+    },
+    {
+      "identifier": "sym_ltl_release",
+      "spelling": "R",
+      "definition": "Linear Temporal Logic (LTL) Release operator: right operand holds until and including the point where left operand becomes true, or holds forever if left never becomes true.",
+      "category": "TEMPORAL_OPERATOR",
+      "scope": "global",
+      "provenance": {
+        "source": "IEEE / Standard Linear Temporal Logic",
+        "reference": "Formalization-Temporal-Logic"
+      },
+      "version": "1.0.0",
+      "aliases": [],
+      "notes": "Binary temporal operator. Dual of Until."
+    },
+    {
+      "identifier": "sym_ltl_weak_until",
+      "spelling": "W",
+      "definition": "Linear Temporal Logic (LTL) Weak Until operator: left operand holds until right operand becomes true, or holds forever if right operand never occurs.",
+      "category": "TEMPORAL_OPERATOR",
+      "scope": "global",
+      "provenance": {
+        "source": "IEEE / Standard Linear Temporal Logic",
+        "reference": "Formalization-Temporal-Logic"
+      },
+      "version": "1.0.0",
+      "aliases": [],
+      "notes": "Binary temporal operator."
+    },
+    {
+      "identifier": "sym_prop_implies",
+      "spelling": "->",
+      "definition": "Logical implication connective: antecedent implies consequent.",
+      "category": "LOGICAL_CONNECTIVE",
+      "scope": "global",
+      "provenance": {
+        "source": "Propositional Logic",
+        "reference": "Standard Logic"
+      },
+      "version": "1.0.0",
+      "aliases": ["==>"],
+      "notes": "Evaluates to true unless antecedent is true and consequent is false."
+    },
+    {
+      "identifier": "sym_prop_and",
+      "spelling": "&&",
+      "definition": "Logical conjunction connective: true if and only if both operands are true.",
+      "category": "LOGICAL_CONNECTIVE",
+      "scope": "global",
+      "provenance": {
+        "source": "Propositional Logic",
+        "reference": "Standard Logic"
+      },
+      "version": "1.0.0",
+      "aliases": ["/\\", "AND"],
+      "notes": "Binary logical connective."
+    },
+    {
+      "identifier": "sym_prop_or",
+      "spelling": "||",
+      "definition": "Logical disjunction connective: true if at least one operand is true.",
+      "category": "LOGICAL_CONNECTIVE",
+      "scope": "global",
+      "provenance": {
+        "source": "Propositional Logic",
+        "reference": "Standard Logic"
+      },
+      "version": "1.0.0",
+      "aliases": ["\\/", "OR"],
+      "notes": "Binary logical connective."
+    },
+    {
+      "identifier": "sym_prop_not",
+      "spelling": "!",
+      "definition": "Logical negation operator: inverts the truth value of the operand.",
+      "category": "LOGICAL_CONNECTIVE",
+      "scope": "global",
+      "provenance": {
+        "source": "Propositional Logic",
+        "reference": "Standard Logic"
+      },
+      "version": "1.0.0",
+      "aliases": ["~", "NOT"],
+      "notes": "Unary logical operator."
+    },
+    {
+      "identifier": "sym_prop_equiv",
+      "spelling": "<->",
+      "definition": "Logical equivalence connective: true if both operands have identical truth values.",
+      "category": "LOGICAL_CONNECTIVE",
+      "scope": "global",
+      "provenance": {
+        "source": "Propositional Logic",
+        "reference": "Standard Logic"
+      },
+      "version": "1.0.0",
+      "aliases": ["==", "<=>"],
+      "notes": "Binary logical connective."
+    },
+    {
+      "identifier": "sym_srs178_loss_of_comm",
+      "spelling": "loss_of_comm",
+      "definition": "Condition predicate indicating complete loss of communication has occurred across redundant buses.",
+      "category": "PREDICATE",
+      "scope": "[SRS178]",
+      "provenance": {
+        "source": "NASA X-38 Software Requirements Specification",
+        "document_id": 1,
+        "requirement_id": 8,
+        "srs_id": "[SRS178]"
+      },
+      "version": "1.0.0",
+      "aliases": ["comm_loss", "comm_lost"],
+      "notes": "Triggers immediate output disabling sequence in Safety Subsystem."
+    },
+    {
+      "identifier": "sym_srs178_outputs_disabled",
+      "spelling": "outputs_disabled",
+      "definition": "State predicate asserting that all system actuator and signal outputs are disabled into safe state.",
+      "category": "PREDICATE",
+      "scope": "[SRS178]",
+      "provenance": {
+        "source": "NASA X-38 Software Requirements Specification",
+        "document_id": 1,
+        "requirement_id": 8,
+        "srs_id": "[SRS178]"
+      },
+      "version": "1.0.0",
+      "aliases": ["all_outputs_disabled"],
+      "notes": "Target state achieved upon safety trigger."
+    },
+    {
+      "identifier": "sym_srs178_timeout_bound",
+      "spelling": "10ms",
+      "definition": "Concrete timing upper bound constant: 10 milliseconds deadline for output shutdown.",
+      "category": "CONSTANT",
+      "scope": "[SRS178]",
+      "provenance": {
+        "source": "NASA X-38 Software Requirements Specification",
+        "document_id": 1,
+        "requirement_id": 8,
+        "srs_id": "[SRS178]"
+      },
+      "version": "1.0.0",
+      "aliases": ["0.01s", "10_ms"],
+      "notes": "Metric deadline parameter for temporal operator F[0, 10ms]."
+    }
+  ]
+}

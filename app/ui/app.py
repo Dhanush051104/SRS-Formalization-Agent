@@ -443,5 +443,97 @@ def cancel_group(group_id):
     return redirect(url_for("document", doc_id=doc_id, section=sec_num))
 
 
+@app.route("/formalize/<int:req_id>", methods=["GET", "POST"])
+def formalize_requirement(req_id):
+    """
+    Renders the end-to-end formalization dashboard for a requirement.
+    Executes SQLite -> Analyst -> ContextBuilder -> Reasoning -> Critic -> Revision -> Clarification.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT r.*, s.title as section_title, s.number as section_number, r.document_id
+        FROM requirements r
+        JOIN sections s ON r.section_id = s.id
+        WHERE r.id = ?
+        """,
+        (req_id,)
+    )
+    req_row = cursor.fetchone()
+    conn.close()
+
+    if not req_row:
+        flash(f"Requirement ID {req_id} not found in database.", "danger")
+        return redirect(url_for("index"))
+
+    result = None
+    if request.method == "POST" or request.args.get("run") == "1":
+        mock_mode = (request.form.get("mock_mode") == "1") or (request.args.get("mock") == "1")
+        max_revisions = int(request.form.get("max_revisions", 2))
+
+        from app.pipeline import FormalizationPipeline
+        if mock_mode:
+            from unittest.mock import MagicMock
+            from app.analyst.analyst_model import AnalystModel
+            from app.analyst.schemas import AnalystResult
+            from app.reasoning.reasoning_model import ReasoningModel
+            from app.reasoning.schemas import ReasoningResult
+            from app.critic.critic_model import CriticModel
+            from app.critic.schemas import CriticResult, CriticFinding
+
+            mock_analyst = MagicMock(spec=AnalystModel)
+            mock_analyst.analyze.return_value = AnalystResult(
+                requirement_id=req_row["id"],
+                global_number=req_row["global_number"],
+                srs_id=req_row["srs_id"],
+                identified_patterns=["Timeout / Deadline", "Failure Handling"],
+                evidence={"Timeout / Deadline": "temporal deadline", "Failure Handling": "safety failure reaction"},
+                missing_information=[],
+            )
+
+            mock_reasoning = MagicMock(spec=ReasoningModel)
+            mock_reasoning.reason.return_value = ReasoningResult(
+                requirement_id=req_row["id"],
+                global_number=req_row["global_number"],
+                srs_id=req_row["srs_id"],
+                formalization="G(failure_event -> F[0, 10ms] safe_state)",
+                interpretation="System enters safe state within 10ms of failure event.",
+                identified_entities=["system", "controller", "outputs"],
+                predicates=["failure_event", "safe_state"],
+                conditions=["failure_event == true"],
+                actions=["activate_safety_cutoff()"],
+                temporal_constraints=["within 10ms"],
+                mathematical_constraints=["response_time <= 10ms"],
+                assumptions=["Hardware sensors detect failure within 1ms"],
+                unresolved_items=["Maximum allowable jitter tolerance"],
+            )
+
+            mock_critic = MagicMock(spec=CriticModel)
+            mock_critic.critique.return_value = CriticResult(
+                requirement_id=req_row["id"],
+                global_number=req_row["global_number"],
+                srs_id=req_row["srs_id"],
+                status="PASS",
+                summary="Formalization strictly preserves all temporal bounds and source constraints.",
+                findings=[],
+                missing_constraints=[],
+                unsupported_assumptions=["Hardware sensors detect failure within 1ms"],
+            )
+
+            pipeline = FormalizationPipeline(
+                analyst_model=mock_analyst,
+                reasoning_model=mock_reasoning,
+                critic_model=mock_critic,
+            )
+        else:
+            pipeline = FormalizationPipeline()
+
+        result = pipeline.run(requirement_id=req_id, max_revisions=max_revisions)
+
+    return render_template("formalize.html", req=req_row, result=result)
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="127.0.0.1", port=5000)
+

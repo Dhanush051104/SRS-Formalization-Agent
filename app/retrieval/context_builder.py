@@ -22,12 +22,14 @@ class ContextPackage:
     identified_patterns: List[str]
     obsidian_knowledge: RetrievalResult
     provenance: Dict[str, Any]
+    symbols: List[Any] = field(default_factory=list)
 
 
 class ContextBuilder:
     """
-    Orchestration component combining SQLiteRetriever (canonical SRS data) and
-    ObsidianRetriever (engineering/domain/formalization knowledge) into an inspectable
+    Orchestration component combining SQLiteRetriever (canonical SRS data),
+    ObsidianRetriever (engineering/domain/formalization knowledge), and
+    SymbolRetriever (canonical mathematical & temporal symbols) into an inspectable
     ContextPackage while preserving input ordering and source provenance.
     """
 
@@ -35,6 +37,7 @@ class ContextBuilder:
         self,
         sqlite_retriever: Optional[SQLiteRetriever] = None,
         obsidian_retriever: Optional[ObsidianRetriever] = None,
+        symbol_retriever: Optional[Any] = None,
     ) -> None:
         """
         Initialize the ContextBuilder orchestrator.
@@ -42,14 +45,17 @@ class ContextBuilder:
         Args:
             sqlite_retriever: Optional SQLiteRetriever instance. If None, default is instantiated.
             obsidian_retriever: Optional ObsidianRetriever instance. If None, default is instantiated.
+            symbol_retriever: Optional SymbolRetriever instance for canonical symbol definitions.
         """
         self.sqlite_retriever = sqlite_retriever or SQLiteRetriever()
         self.obsidian_retriever = obsidian_retriever or ObsidianRetriever()
+        self.symbol_retriever = symbol_retriever
 
     def build(
         self,
         requirement_ids: List[int],
         pattern_names: List[str],
+        include_symbols: bool = False,
     ) -> ContextPackage:
         """
         Builds a ContextPackage given requirement IDs and exact Analyst pattern names.
@@ -92,9 +98,29 @@ class ContextBuilder:
             },
         }
 
+        symbols_list: List[Any] = []
+        if include_symbols:
+            if self.symbol_retriever is None:
+                from app.symbols.symbol_retriever import SymbolRetriever
+                self.symbol_retriever = SymbolRetriever()
+
+            seen_ids = set()
+            for req in req_contexts:
+                retrieval = self.symbol_retriever.get_symbols_for_requirement(req.srs_id)
+                for sym in retrieval.symbols:
+                    if sym.identifier not in seen_ids:
+                        seen_ids.add(sym.identifier)
+                        symbols_list.append(sym)
+
+            provenance["symbols"] = {
+                "source": "SymbolRegistry",
+                "retrieved_count": len(symbols_list),
+            }
+
         return ContextPackage(
             requirements=req_contexts,
             identified_patterns=pattern_names,
             obsidian_knowledge=obsidian_result,
             provenance=provenance,
+            symbols=symbols_list,
         )

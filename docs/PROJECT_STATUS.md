@@ -34,16 +34,38 @@ We implemented the `RevisionManager` orchestrating bounded iterative feedback cy
 - **Full History Provenance:** Captures every intermediate `ReasoningResult`, `CriticResult`, and revision prompt in `RevisionHistoryEntry` inside `RevisionResult`.
 - **Forwarding Feedback:** `build_revision_user_prompt` serializes original `ContextPackage`, candidate formalization, and full Critic findings (severities, descriptions, source/reasoning evidence, recommendations, missing constraints, unsupported assumptions) into the revision prompt.
 
+### Milestone 7: Symbol Registry, Retrieval & Validation
+We implemented the canonical Symbol Registry infrastructure ([app/symbols/](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/app/symbols/)) and authoritative registry file ([data/symbol_registry.json](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/data/symbol_registry.json)).
+- **Authoritative Registry:** Canonical repository defining mathematical logic operators, temporal operators, propositional connectives, and requirement-scoped domain predicates/constants. Prevents models from silently redefining symbols.
+- **Scope Isolation:** Separates globally applicable symbols (`G`, `F`, `X`, `U`, `->`, `&&`, etc.) from requirement-scoped symbols (e.g. `loss_of_comm`, `outputs_disabled` scoped strictly to `[SRS178]`). Allows legitimate distinct definitions across different requirement scopes.
+- **Deterministic Validation:** Validates unique identifiers, detects duplicate spellings or alias collisions within identical scopes, and rejects malformed registry entries.
+- **Deterministic Retrieval:** `SymbolRetriever` provides queries for global symbols, requirement-relevant symbols, category searches, and spelling/alias lookups with explicit provenance.
+- **Consistency Validator:** `SymbolValidator` audits candidate formalizations against registry definitions, flagging out-of-scope symbol leaks, conflicting definitions, and unregistered domain identifiers.
+- **Additive Context Integration:** `ContextBuilder.build()` provides an additive `include_symbols=True` flag to inject symbols into `ContextPackage.symbols` without breaking existing callers or backward compatibility.
+
+### Evaluation Fixture: Multi-Domain Simple Requirements Corpus
+Integrated a dedicated 306-requirement multi-domain evaluation corpus ([tests/fixtures/simple_requirements.txt](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/fixtures/simple_requirements.txt)) and a lightweight structured loader ([tests/fixtures/simple_requirements_loader.py](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/fixtures/simple_requirements_loader.py)).
+- **Corpus Coverage:** 306 natural-language requirements across 10 engineering domains (redundant computer / bus-master system, ventilator, UAV, washing machine, microwave oven, refrigerator, ADAS, fire safety controller, access control, elevator).
+- **Architecture Integrity:** Kept strictly separate from the production SRS knowledge base (`SRS-Knowledge/`) without modifying pattern or concept notes.
+- **Intended Purpose:** Serves as a standardized benchmark corpus for:
+  1. **Module-level testing:** Validating individual prompt schemas, parser stages, and model output mappings.
+  2. **Regression testing:** Preventing performance degradation across system updates.
+  3. **Final end-to-end evaluation:** Verifying end-to-end pipeline execution from requirement selection to final formalization.
+  4. **Pattern coverage evaluation:** Assessing how effectively identified patterns map across diverse system domains.
+  5. **Model-quality benchmarking:** Comparing formalization accuracy, precision, and hallucination rates across different LLM backends (Llama 3, DeepSeek, Claude, GPT-4).
+
 ---
 
 ## 4. Current Ingestion and Validation Results
-Based on testing against the **NASA X-38 Software Requirements Specification (SRS)**:
+Based on testing against the **NASA X-38 Software Requirements Specification (SRS)** and the **Simple Requirements Corpus**:
 * **Parsed Raw Elements:** 5,379 elements ingested.
-* **Unique Requirements Detected:** 195 SRS requirements.
+* **Unique Requirements Detected:** 195 SRS requirements (NASA X-38) + 306 Multi-Domain Evaluation requirements.
 * **Real Sections Identified:** 107 sections (including Sections 1 and 2, which are represented in the tree even with 0 requirements).
 * **Section 3.2.1 System Initialization:** Confirmed to contain all 17 requirements (R1 to R17 / SRS194 to SRS015).
 * **Target Group Test Suite:** 13 unit tests verifying validations, selection order, and CRUD operations pass successfully.
-* **Full Agent Test Suite:** 96 offline deterministic unit tests + live Ollama Llama 3 integration tests pass cleanly.
+* **Evaluation Corpus Test Suite:** 7 deterministic unit tests verifying exact line preservation, 1-306 numbering, domain categorization, and duplicate separation pass cleanly.
+* **Symbol Registry Test Suite:** 16 deterministic unit tests verifying loading, global/scoped retrieval, alias resolution, scope isolation, validation rejection, and formalization auditing pass cleanly.
+* **Full Agent Test Suite:** 119 offline deterministic unit tests + live Ollama Llama 3 integration tests pass cleanly.
 
 ---
 

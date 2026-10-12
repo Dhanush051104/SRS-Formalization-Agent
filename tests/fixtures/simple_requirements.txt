@@ -1,0 +1,306 @@
+When the Computer boots up, the Computer shall read the Channel ID from HW.
+When the Computer starts, if the other Computer has not already assumed the role of Active computer, the Computer shall assume the role of Active Computer.
+If both the Computers simultaneously boot up, the Computer with Channel ID 1 shall assume the role of Active Computer.
+The Active Computer shall configure itself as the Bus Master.
+When the Active Computer configures itself as the Bus Master, it shall enter operational state.
+The Active Computer shall detect the booting of the Standby Computer.
+When the Active Computer detects the booting of the Standby Computer, the Active Computer shall send its state information to the Standby Computer.
+When the Standby Computer receives state information from the Active Computer, the Standby Computer shall enter the operational state.
+While in the operational state, the Computers shall repeat the execution every 10 msec.
+While in the operational state, the Active Computer shall send the command to a Remote Terminal on bus A.
+While in the operational state, the Active Computer shall include a heartbeat counter in its command.
+While in the operational state, if any Remote Terminal does not acknowledge the commands on either bus A or B for 3 consecutive periods, the Active Computer shall declare communication failure for that Remote Terminal.
+While in the operational state, if any Remote Terminal's heartbeat count does not change for 3 consecutive frames, the Active Computer shall declare failure for that Remote Terminal.
+While in the operational state, if a Remote Terminal responds for 3 consecutive periods, the Active Computer shall set communication failure OFF for that Remote Terminal.
+While in the operational state, if both redundant pairs of Remote Terminals are healthy, the Active Computer shall consider the average of the inputs from them.
+While in the operational state, if a Remote Terminal has indicated failure in its status, the Active Computer shall not consider the inputs from it.
+While in the operational state, if the inputs are not considered from a Remote Terminal, the Active Computer shall consider the inputs from the corresponding redundant pair.
+While in the operational state, if the inputs from both the redundant pair of Remote Terminals are failed, the Active Computer shall retain the previous inputs.
+While in the operational state, the Standby Computer shall update the status of each Remote Terminal.
+While in the operational state, if the Active Computer does not send commands for 10 consecutive frames to any Remote Terminal, the Standby Computer shall take over as Active Computer.
+While in the operational state, the Standby Computer shall report its health status to Active Computer.
+The Computer shall send the Remote Terminal's health and status to Telemetry every 10 msec.
+The Active Computer shall send the health and status of the Standby Computer to Telemetry every 10 msec.
+If the Active Computer fails, the Standby Computer shall take over as Active Computer.
+If the Active Computer fails, the Standby Computer shall assume the role of Active Computer.
+When powered on, the Ventilator shall check for the presence of the calibration data.
+When powered on, if the calibration data is not present, the Ventilator shall prompt for Calibration.
+When powered on, if the calibration data is older than six months, the Ventilator shall prompt for Calibration.
+If valid Calibration data is not found, the Ventilator shall not allow starting of the ventilation.
+When the Start ventilation button is pressed, the Ventilator shall read configuration data from the UI Controller.
+When the configuration data is read, the Ventilator shall compute the inhalation period and exhalation period from the I-E ratio and Respiration rate.
+When the Start ventilation button is pressed, the Ventilator shall enter inhalation cycles.
+When entering the inhalation cycle, the Ventilator shall compute the flow rate from configured Tidal volume and inhalation period.
+While in the inhalation cycle, if the volume mode is chosen, the Ventilator shall maintain a constant flow rate.
+While in the inhalation cycle, if the inhalation period is complete, the Ventilator shall enter the exhalation cycle.
+When exiting the inhalation cycle, the Ventilator shall update the inhaled Tidal volume on the screen.
+While in the exhalation cycle, the Ventilator shall maintain the lung pressure to the configured PEEP level.
+While in the exhalation cycle, the Ventilator shall measure the exhaled Tidal volume.
+While in the exhalation cycle, if the exhalation period is complete, the Ventilator shall enter the inhalation cycle.
+When exiting the exhalation cycle, the Ventilator shall update the exhaled Tidal volume on the screen.
+When exiting the exhalation cycle, the Ventilator shall read the configuration data from UI Controller.
+If the lung pressure exceeds configured safety limit, the Ventilator shall open the safety valve.
+If the lung pressure exceeds configured safety limit continuously for one second, the Ventilator shall open the safety valve.
+If the moving average of 3 readings of lung pressure exceeds the configured safety limit, the Ventilator shall open the safety valve.
+If the power source is the battery the Ventilator shall make a short beep every 3 seconds.
+If the inlet air pressure is below the critical limit, the Ventilator shall make a long beep every 1 second.
+If the lung pressure during the exhalation period is below PEEP for 3 consecutive breaths, the Ventilator shall make a long beep once.
+If the inhaled Tidal volume and exhaled Tidal volume differ by more than 20%, the Ventilator shall show an alert on the screen.
+While in the ventilation state, the Ventilator shall store the important parameters of the patient in permanent storage.
+While the UAV is in the waypoint navigation mode, the UAV shall follow the path per the flight plan.
+While the UAV is in the waypoint navigation mode, the UAV shall initiate the turn towards the next waypoint when the UAV is closer than 100 meters from the next waypoint.
+While the UAV is in the waypoint navigation mode, the UAV shall ensure the reference speed is higher than the stall speed.
+While in the takeoff stage, the UAV shall set the engine throttle to 100%.
+While in the takeoff stage, when the ground speed is more than V1 m/s the UAV shall set the pitch reference to 5 degrees.
+While in the takeoff stage, if a critical failure is detected, if the ground speed is less than V1 m/s, the UAV shall abort the takeoff.
+While in the takeoff stage, the UAV shall ensure the track error is within 5 meters from the runway centerline.
+While in the takeoff stage, if the track error is more than 5 meters from the runway centerline, if the ground speed is less than V1 m/s, the UAV shall abort takeoff.
+While in the takeoff stage, if two or more WOW switches read zero consecutively for 1 second, the UAV shall declare in-air and enter the climbing state.
+While in the climbing state, the UAV shall maintain the heading until the altitude is more than 500 meters from the ground.
+While in the climbing state, when the UAV is aligned in the heading of the first waypoint within 1 degree, the UAV shall enter waypoint navigation mode.
+While the UAV is in the waypoint navigation mode, the UAV shall ensure the difference between actual airspeed and reference airspeed is less than 5 m/s.
+While the UAV is in the waypoint navigation mode, the UAV shall ensure the difference between actual altitude and reference altitude is less than 100 meters.
+While the UAV is in the waypoint navigation mode, the UAV shall ensure the heading error is less than 1 degree unless collision alarms are present.
+The UAV shall send position commands to control surfaces every 25 msecs.
+If the difference between the commanded position and the read position is more than 3 degrees continuously for 1 second, the UAV shall declare that the control surface failed.
+If any control surface has failed, the UAV shall send an alert message to the pilot.
+If the rail voltage is below 26 volts continuously for 3 seconds, the UAV shall turn off the payloads.
+If the engine RPM is 20% below the demanded RPM, continuously for 3 seconds, the UAV shall declare engine failure.
+If the ground communication is lost continuously for more than 5 seconds, the UAV shall follow the predefined path to return home.
+If the next waypoint is the last waypoint, the UAV shall enter landing phase.
+While in the landing phase, the UAV shall align to the runway heading and follow the predefined path.
+While in the landing phase, the UAV shall declare alignment complete if it is within a 5% error from the predefined path.
+While in the landing phase, when the UAV is within 1 kilometer radius from the touch down point, if the UAV is unable to achieve alignment complete, the UAV shall abort the landing and follow the retry path.
+While in the landing phase, when the alignment complete is declared, if the lateral error from the predefined path is more than 5%, the UAV shall abort the landing and follow the retry path.
+While in the landing phase, when the alignment complete is declared, if the longitudinal error from the predefined path is more than 5%, the UAV shall abort the landing and follow the retry path.
+While in the landing phase, if two or more WOW switches read one consecutively for 1 second, the UAV shall declare on-ground.
+While in the landing phase, if on-ground is declared, the UAV shall set the engine throttle to zero.
+While in the landing phase, if on-ground is declared, the UAV shall apply air brakes.
+While in the landing phase, if on-ground is declared, when the ground speed is below 50 m/s, the UAV shall apply wheel brakes.
+While in the landing phase, if on-ground is declared, the UAV shall ensure the track error is within 5 meters from the runway centerline.
+If the user presses the start button, the washing machine shall begin the selected cycle.
+When the cycle completes, if the user does not open the door within 5 minutes, the system shall emit a reminder.
+If the user selects the extra rinse option, the system shall add an additional rinse cycle at the end of the wash.
+While in operation, if the user presses the pause button, the cycle shall halt temporarily until resumed.
+While in operation, if the user presses the pause button, the cycle shall halt until resumed.
+If the water temperature setting is set to cold, the system shall not activate the heating element during the cycle.
+When the user selects the delicate fabric option, the system shall adjust the wash cycle to minimize agitation.
+When the user selects the delicate fabric option, the system shall use reduce the rinse speed by 50%.
+If the water inlet valve malfunctions, the system shall display an error code indicating the issue.
+While the washing machine is running, if the load becomes unbalanced, the system shall display an error message and attempt to rebalance.
+If the user selects a cycle that requires a specific detergent type, the system shall display a reminder if the incorrect detergent is detected.
+When the cycle completes, the system shall drain the water from the tank before unlocking the door.
+If the user selects the extra rinse option, the system shall indicate the additional rinse cycle for verification.
+If the user adjusts the cycle settings, the system shall display the updated parameters for verification.
+While in operation, if an error occurs, the system shall display the error.
+When the user selects the delay start option, the system shall display the countdown timer for verification.
+If the user initiates the self-cleaning cycle, the system shall display a progress bar for verification.
+When the cycle completes, the system shall signal completion for verification.
+If the user selects the quick wash option, the system shall display the reduced cycle time for verification.
+While the washing machine is running, if the load becomes unbalanced, the system shall prompt the user to verify and resolve the issue.
+If the water level drops too low during the cycle, the system shall display a notification for verification.
+If the user desires to change the default cycle settings, the system shall allow modification through the settings menu.
+The washing machine shall stop the cycle if the door is opened and resume when the door is closed.
+The washing machine shall dispense detergent into the tank at the beginning of each wash cycle.
+The washing machine shall drain the water from the tank at the end of the rinse cycle.
+If an error occurs, the washing machine shall display the corresponding error code on the control panel for easy troubleshooting.
+The washing machine shall lock the door during operation to prevent accidents.
+The washing machine shall adjust the spin speed based on the selected wash program.
+The washing machine shall maintain consistent water temperature throughout the wash cycle.
+The washing machine shall not start the wash cycle if the door is open.
+The washing machine shall have adjustable cycle duration settings for user customization.
+The washing machine shall indicate the selected wash cycle on the control panel for verification.
+The washing machine shall signal the end of the cycle for user verification.
+The washing machine shall display the current cycle status and remaining time on the control panel for verification.
+The washing machine shall log cycle data for review and verification by service technicians.
+The washing machine shall include a test mode for verifying the functionality of sensors and components.
+While in maintenance mode, the washing machine shall offer firmware updates for adding new wash programs and features.
+While in maintenance mode, the washing machine shall allow users to customize the default settings for each wash program.
+The washing machine shall provide options for adjusting water levels to accommodate different load sizes.
+The washing machine shall start the wash cycle immediately upon pressing the start button.
+When the user presses the start button, the washing machine shall begin the wash cycle.
+When the water level reaches the specified threshold, the washing machine shall start the wash cycle automatically.
+When the rinse cycle finishes, the washing machine shall drain the water from the tank.
+When the user selects the cold temperature setting, the washing machine shall not heat the water during the cycle.
+When the door is closed securely, the washing machine shall initiate the selected cycle.
+When the cycle ends, the washing machine shall emit a series of beeps to signal completion.
+If the detergent dispenser is empty, the washing machine shall display a message on the control panel.
+When the child lock is activated, the washing machine shall prevent any button inputs until the lock is deactivated.
+When the cycle completes, the washing machine shall signal and display End on the control panel.
+When the user selects a cycle, the washing machine shall display the chosen cycle on the control panel for verification.
+When the user adjusts settings, the washing machine shall reflect the changes on the control panel for verification.
+When the cycle pauses, the washing machine shall display Paused on the control panel for verification.
+When the user selects the extra rinse option, the washing machine shall indicate its activation for verification.
+When the water level is reached, the washing machine shall indicate Water Ready for verification.
+When the cycle is delayed, the washing machine shall display the countdown timer on the control panel for verification.
+When the child lock is activated, the washing machine shall display Child Lock On on the control panel.
+When the user desires to change cycle settings, the washing machine shall allow modification through the control panel.
+When new wash programs emerge, the washing machine shall allow for easy integration and modification of cycle parameters.
+When upgrading software, the washing machine shall enable seamless modification of features and settings.
+When accommodating different detergent types, the washing machine shall allow modification of dispensing mechanisms.
+When integrating with smart home systems, the washing machine shall be modifiable to enable remote control and monitoring.
+When regulatory standards change, the washing machine shall be modifiable to ensure compliance through adjustments in cycle behavior.
+When user preferences change, the washing machine shall be modifiable to include new cycle presets and settings.
+When energy-saving initiatives are implemented, the washing machine shall be modifiable to optimize energy usage during cycles.
+When accommodating various fabric types, the washing machine shall allow for modification of cycle parameters for optimal cleaning.
+If the water level drops below the minimum required level, the washing machine shall stop the cycle and display an error message.
+If the door remains open for more than 5 minutes during the wash cycle, the washing machine shall pause operation and emit a continuous beep until the door is closed.
+If the load becomes unbalanced during the spin cycle, the washing machine shall stop spinning and attempt to redistribute the load evenly.
+If the water temperature exceeds 60C during the heating phase, the washing machine shall activate the safety cutoff to prevent scalding.
+If the detergent dispenser mechanism jams, the washing machine shall display an error code indicating a dispenser malfunction.
+If the water inlet valve fails to open within 2 minutes of the cycle start, the washing machine shall display an error message indicating a water supply issue.
+If the drain pump detects a blockage, the washing machine shall display an error message prompting the user to check the drain hose for obstructions.
+If the selected cycle duration exceeds 2 hours, the washing machine shall terminate the cycle and alert the user.
+If the motor temperature exceeds 80C, the washing machine shall activate a cooling cycle to prevent damage to the motor.
+If the cycle completes, the washing machine shall emit an audible signal and display End on the control panel for verification.
+If the door remains open during operation, the washing machine shall emit a continuous beep and display a warning message on the control panel for verification.
+If the load becomes unbalanced during the spin cycle, the washing machine shall display an error message on the control panel for verification.
+If the water temperature exceeds the safety limit, the washing machine shall display an error message on the control panel for verification.
+If the cycle duration exceeds the preset time limit, the washing machine shall display an error message on the control panel for verification.
+If the user selects a cycle incompatible with the load size, the washing machine shall display a warning message on the control panel for verification.
+If the motor overheats, the washing machine shall display a warning message on the control panel for verification.
+If the user desires to change cycle settings, the washing machine shall allow modification through the control panel.
+If new wash programs emerge, the washing machine shall allow for easy integration and modification of cycle parameters.
+If accommodating different detergent types, the washing machine shall allow modification of dispensing mechanisms.
+If integrating with smart home systems, the washing machine shall be modifiable to enable remote control and monitoring.
+If regulatory standards change, the washing machine shall be modifiable to ensure compliance through adjustments in cycle behavior.
+If energy-saving initiatives are implemented, the washing machine shall be modifiable to optimize energy usage during cycles.
+If users request additional customization options, the washing machine shall be modifiable to include new cycle presets and settings.
+If firmware updates are released, the washing machine shall be modifiable to incorporate new features and enhancements.
+While the washing machine is in standby mode, if the power button is pressed, the system shall activate the control panel and display the default settings.
+While the wash cycle is active, the washing machine shall agitate the laundry at the specified speed and duration according to the selected program.
+While the rinse cycle is engaged, the washing machine shall fill the tank with clean water until the specified water level is reached.
+While the spin cycle is in progress, the washing machine shall rotate the drum clockwise at the designated spin speed.
+While the cycle completes, the washing machine shall drain the water from the tank and emit a series of audible beeps to signal completion.
+While the child lock is activated, the washing machine shall disable all buttons and display Child Lock On on the control panel.
+While the cycle is paused, the washing machine shall maintain the current cycle state and display Paused on the control panel until resumed or cancelled.
+If the water level exceeds the maximum capacity, the washing machine shall stop the inflow of water, display an error code, and emit a continuous beep until the issue is resolved.
+If the user selects a cycle incompatible with the load size, the washing machine shall display a warning message on the control panel for verification.
+Where the quick wash feature is available, the washing machine shall shorten the cycle duration to complete a wash in 30 minutes.
+Where the delay start function is included, the washing machine shall allow users to schedule cycle initiation up to 24 hours in advance.
+Where the automatic load detection feature is available, the washing machine shall adjust water levels based on the weight of the laundry.
+Where the energy-saving mode is available, the washing machine shall optimize cycle parameters to reduce water and electricity consumption by 20%.
+Where the steam cleaning function is provided, the washing machine shall inject steam into the drum during the wash cycle to remove stains and odors.
+Where the self-cleaning cycle is included, the washing machine shall run a hot water cycle with detergent to clean the drum and remove residues.
+Where the smart connectivity feature is available, the washing machine shall be compatible with iOS and Android devices for remote control and monitoring.
+When the cycle completes, the washing machine shall emit audible signals and display on the control panel to indicate the end of the cycle.
+When the cycle is paused, the washing machine shall display Paused on the control panel and maintain the current cycle state.
+If the cycle encounters an error, the washing machine shall display the error code on the control panel.
+Where the delicate cycle is included, the washing machine shall allow modification of agitation intensity, spin speed, and water temperature settings.
+Where the quick wash feature is available, the washing machine shall allow users to modify cycle duration and temperature settings.
+Where the delay start function is included, the washing machine shall allow users to adjust the start time and duration of delayed cycles.
+Where the child lock option is provided, the washing machine shall allow users to enable or disable the child lock feature as needed.
+Where the extra rinse setting is included, the washing machine shall allow users to enable or disable the extra rinse cycle and adjust its duration.
+Where the energy-saving mode is available, the washing machine shall allow users to enable or disable energy-saving features and adjust parameters.
+Where the steam cleaning function is provided, the washing machine shall allow users to enable or disable steam cleaning and adjust steam intensity.
+Where the smart connectivity feature is available, the washing machine shall allow users to enable or disable smart control and adjust connectivity settings.
+While in standby mode, when the user presses the power button, the control panel shall activate and display the default settings.
+While the wash cycle is running, when the water level sensor detects the appropriate level, the agitator shall start rotating clockwise at a speed of 60 RPM.
+While the rinse cycle is active, when the water temperature sensor measures below 20C, the heating element shall activate to maintain temperature.
+While the spin cycle is engaged, when the drum speed sensor detects 800 RPM, the drain pump shall activate to remove water from the drum.
+When the start button is pressed, if the door is open, the washing machine shall emit a continuous beep and display Door Open on the control panel.
+When the cycle completes, the washing machine shall emit three short beeps and display Cycle Finished on the control panel.
+When the cycle begins, if the detergent dispenser is empty, the washing machine shall display Add Detergent on the control panel and pause the cycle.
+While the cycle is paused, when the pause button is pressed again, the washing machine shall resume the cycle with the same settings and display Cycle Resumed.
+When diagnostic tests are performed, the washing machine shall log test results and actions taken for traceability of troubleshooting efforts.
+When prolonged operation occurs, the washing machine shall log motor temperature and activate cooling cycle.
+When the Microwave oven is powered on, the oven shall ensure that no microwaves are emitted.
+When the Microwave oven is turned on, the oven shall turn on the light in the Cooking Cavity for 10 seconds.
+When the start button is pressed, if the door is open, the Microwave oven shall display an error message and not start the emission.
+While the microwave emission is on, the Microwave oven shall not allow the door to be open.
+While the microwave emission is on, if the door is opened, the Microwave oven shall stop the emission immediately and pause the timer.
+When the timer is paused, if the door is closed, the Microwave oven shall not turn on the emission until the start button is pressed again.
+If the Microwave oven remains in paused condition for more than 5 minutes, the Microwave oven shall reset the timer to zero.
+While the microwave emission is on, when the timer reaches zero, the Microwave oven shall stop the emission and turn on the lights in the Cooking Cavity.
+When the door is opened, the Microwave oven shall turn on the light in the Cooking Cavity.
+When the start button is pressed, if the set power level is more than 80% and the timer is set for more than 10 minutes, the Microwave oven shall display a warning.
+While the microwave emission is on, if the temperature of the Cooking Cavity is more than 60 degrees, the Microwave oven shall turn on the fan.
+While the fan is on, if the temperature of the Cooking Cavity is less than 50 degrees, the Microwave oven shall turn off the fan.
+While the fan is on, if the temperature of the Cooking Cavity is more than 70 degrees, the Microwave oven shall reduce the power level by 20%.
+While the fan is on, if the temperature of the Cooking Cavity is more than 80 degrees, the Microwave oven shall turn off the emission and start beeping.
+While the microwave emission is on, the Microwave oven shall rotate the turn table at 10 RPM.
+While the microwave emission is on, if the emitted energy is more than 10% of the set level, the Microwave oven shall turn off the emission and display an error code.
+While the microwave emission is on, if the power level is changed, the Microwave oven shall change the emission level as per the new power level.
+Where preset cooking options are provided, when the start button is pressed, if the defrost option is selected, the Microwave oven shall turn on the emission at 10% power level for 30 seconds.
+The refrigerator shall maintain the temperature in the cabin within a 1-degree difference from the set temperature.
+The refrigerator shall turn off the compressor if the difference between the actual and set temperatures is within 0.5 degrees for more than 5 minutes.
+The refrigerator shall turn on the compressor if the difference between the actual and set temperatures is within 0.8 degrees for more than 5 minutes.
+The refrigerator shall display the measured temperature.
+The refrigerator shall be able to detect if the door is opened or not.
+The refrigerator shall allow the user to set the cabin temperature from 0 to 25 degrees with a resolution of 0.5 degrees.
+If the door is left open for more than 30 minutes, the refrigerator shall start beeping, and turn off the compressor.
+If the compressor is on continuously for more than 15 minutes, the refrigerator shall start beeping, and turn off the compressor.
+Where the built-in stabilizer is provided, the refrigerator shall regulate the input voltage within 10% of the rated voltage.
+Where the built-in stabilizer is provided, if the input voltage is below 10% of the rated voltage, the refrigerator shall turn off the compressor and display an error code.
+While in the cold state, if the wheel brake is applied, when the start button is pushed, the ADAS shall start the engine.
+Where Hill Assist feature is included, if the gear stick is not in R position, the ADAS shall prevent wheel movement in the reverse direction.
+While the ignition is on, if the driver has not worn the seat belt, the ADAS shall beep once in 3 seconds.
+While the engine has started, if the vehicle is moving, if the hand brake is on, the ADAS shall beep once in 2 seconds.
+While the engine has started, if the vehicle is moving, if any of the doors are open, the ADAS shall beep once in 1 second and keep the cabin light on.
+While the engine has started, if the Gear Stick is in the N position, the ADAS shall run the engine at idle speed.
+When the Gear Stick is in the R position, the ADAS shall signal the Infotainment system to display the rear camera feed.
+Where Cruise mode is included, when the cruise button is pressed, if the brakes are not applied, the ADAS shall enter the Auto-cruise mode.
+When entering Auto-cruise mode, the ADAS shall latch the current speed as the reference speed.
+While in Auto-cruise mode, the ADAS shall adjust the fuel injection to maintain the reference speed.
+While in Auto-cruise mode, if the + button is pressed, the ADAS shall increase the reference speed by 1 kmph.
+While in Auto-cruise mode, the ADAS shall limit the maximum reference speed to 100 kmph.
+While in Auto-cruise mode, if the - button is pressed, the ADAS shall decrease the reference speed by 1 kmph.
+While in Auto-cruise mode, the ADAS shall limit the minimum reference speed to 20 kmph.
+While in Auto-cruise mode, if the brakes are applied, the ADAS shall exit the Auto-cruise mode.
+While in Auto-cruise mode, if the throttle peddle is pressed, the ADAS shall exit the Auto-cruise mode.
+While in Auto-cruise mode, the ADAS shall display the cruise symbol on the dashboard.
+Where the Collision Avoidance feature is included, the ADAS shall detect objects within 50 meters along the direction of the vehicle.
+Where the Collision Avoidance feature is included, if the distance between detected objects and the vehicle is decreasing continuously faster than 10 m/s, the ADAS shall declare detected objects as obstacles.
+Where the Collision Avoidance feature is included, if an obstacle is detected within 5 meters, the ADAS shall apply brakes and generate a 3-second beep.
+When Economy mode is set, the ADAS shall regulate throttle increase to be within 2% per second.
+When Sport mode is set, the ADAS shall keep the throttle level 10% above the demanded throttle level.
+While the engine has started, the ADAS shall indicate the estimated fuel efficiency in kilometers per liter on the dashboard.
+While the engine has started, the ADAS shall indicate the remaining fuel on the dashboard.
+While the engine has started, if the speed is above 100 kilometers per hour, the ADAS shall generate warning.
+When the available fuel is less than 10 liters, the ADAS shall show the fuel gauge in yellow.
+While the engine has started, the ADAS shall indicate the estimated distance in kilometers that can be traveled with the available fuel.
+Where tyre pressure sensors are installed, the ADAS shall show tyre pressures on the dashboard.
+Where tyre pressure sensors are installed, if the tyre pressure is above 50 units for any wheel, the ADAS shall alert the driver.
+Where Driver Monitoring is included, if the driver closes the eyes for more than 2 seconds, the ADAS shall generate an alarm.
+Where Pedestrian Detection is included, the ADAS shall detect pedestrians within 30 degrees on either side of the vehicle.
+Where Pedestrian Detection is included, when one or more pedestrians are detected, the ADAS shall estimate the range for each detected pedestrian.
+Where Pedestrian Detection is included, if pedestrians are detected within 30 meters, the ADAS shall generate the Pedestrian caution alarm.
+If the Pedestrian caution alarm is on, if the pedestrians are more than 50 meters away, the ADAS shall withdraw the Pedestrian caution alarm.
+Where Lane Departure Detection is included, if the turn signal is off, if the vehicle departs from the current lane by 2 meters, the ADAS shall detect departure.
+When the Lights knob is set to Auto, if the headlights are on, if the outside light intensity is above 60000 lumens continuously for 10 seconds, the ADAS shall turn-off the headlights.
+When the Lights knob is in Auto mode, if the visibility is below 100 meters continuously for 10 seconds, the ADAS shall turn on the fog lights.
+When the Wiper knob is in Auto mode, if the rain intensity is more than 10 mm the ADAS shall turn on the Wiper at 3rd level.
+When the Wiper knob is in Auto mode, if the rain intensity is between 5 and 10 mm, the ADAS shall turn on the Wiper at 2nd level.
+When the Wiper knob is in Auto mode, if the rain intensity is between 1 and 5 mm, the ADAS shall turn on the Wiper at 1st level.
+The Fire Safety Controller shall monitor the health of the smoke detectors.
+If a smoke detector is not communicating, the Fire Safety Controller shall generate an alert on the control panel.
+The Fire Safety Controller shall monitor the water level in the overhead tank.
+If the water level in the overhead tank is below 10%, the Fire Safety Controller shall generate an alert on the control panel.
+If one or more smoke detectors have detected fire persistently for 5 seconds, the Fire Safety Controller shall trigger the fire alarm.
+If the fire alarm is on, if no smoke detectors have detected fire persistently for 10 seconds, the Fire Safety Controller shall stop the fire alarm.
+When the fire alarm is turned on, the Fire Safety Controller shall illuminate the LEDs corresponding to the location of the smoke detectors that have detected smoke.
+When the fire alarm is turned on, the Fire Safety Controller shall signal the Access Control System to disarm and open all doors.
+When the fire alarm is turned on, the Fire Safety Controller shall illuminate the emergency exit path lights.
+When the fire alarm is turned on continuously for more than 10 seconds, the Fire Safety Controller shall activate the sprinklers within 10-meter radius from the smoke detectors that have detected smoke.
+When the fire alarm is turned on, the Fire Safety Controller shall dial the Fire Services and play the recorded message indicating the location.
+The Access Control System shall read the Fast-tag and identify the vehicles at the entry gate.
+When a vehicle is identified at the entry gate, if the vehicle is authorized, the Access Control System shall open the Boom-barrier.
+When a vehicle is identified at the entry gate, if the vehicle is not authorized, the Access Control System shall turn on the red light.
+When a vehicle is identified at the entry gate, if the vehicle is not authorized, if the security presses the Open button, the Access Control System shall open the Boom-barrier.
+When a vehicle is permitted entry, the Access Control System shall log the date, time and identification of the vehicle.
+While in the opened state, when the vehicle passes beyond 10 meters, the Access Control System shall close the Boom-barrier.
+While in the closed state, if the Boom-barrier senses an impact of more than 20 kgs, the Access Control System shall generate robbery alarm.
+The Access Control System shall read the card presented at the Turnstile gate.
+When a card is read, if the card is valid, the Access Control System shall open the Turnstile gate for 5 seconds.
+When the Turnstile gate is opened, the Access Control System shall record the date and time along with the card id.
+If Turnstile panes sense force of more than 10 kgs, the Access Control System shall generate the piggy-back alarm.
+While the doors are open, the elevator shall prevent the cabin movement in vertical direction.
+While the doors are open, the elevator shall sense the obstacles before closing the doors.
+While the doors are open, if the obstacles are not detected for more than 2 seconds, the elevator shall start closing the doors.
+While closing the doors, if the obstacles are sensed, the elevator shall retract the doors open.
+While doors are closed, if the cabin weight is more than 1000 kg, the elevator shall declare Overload.
+If the overload is declared, the elevator shall display OL on internal and all external displays.
+When the doors are closed, the elevator shall enter the ready to move state.
+While in ready to move state, if internal requests do not exist, if an external request exists, the elevator shall move in the direction as per the external request.
+While in moving, the elevator shall ignore the request to open the door.
+While in moving, if there is either an internal or external request at the next floor, the elevator shall slow down and stop at the floor.

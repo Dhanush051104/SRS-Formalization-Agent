@@ -35,7 +35,8 @@ To maintain integrity, the system divides execution into a **deterministic found
                                          │
                                          ▼
                                    ContextBuilder ◄─── ObsidianRetriever (via Pattern-Registry.json)
-                                         │
+                                         ▲
+                                         │ ◄────────── SymbolRetriever (via data/symbol_registry.json)
                                          ▼
                                    ContextPackage
                                          │
@@ -49,7 +50,7 @@ To maintain integrity, the system divides execution into a **deterministic found
                              │                ReasoningResult
                              │                       │
                              │                       ▼
-                             │            CriticModel (OllamaCritic)
+                             │            CriticModel (OllamaCritic) ◄─── SymbolValidator
                              │                       │
                              │                       ▼
                              │                  CriticResult
@@ -136,6 +137,19 @@ To maintain integrity, the system divides execution into a **deterministic found
   - Termination conditions: immediate stop on `PASS` (status=`PASS`, termination_reason=`CRITIC_PASSED`) or `BLOCKED` (status=`BLOCKED`, termination_reason=`CRITIC_BLOCKED`).
   - Reaches max iterations: status=`MAX_ITERATIONS`, termination_reason=`MAX_ITERATIONS_REACHED`.
   - Maintains complete, inspectable iteration history (`RevisionHistoryEntry`).
+
+### 13. Symbol Registry, Retrieval & Validation (`app/symbols/`) (IMPLEMENTED)
+- **Responsibility:** Canonical, version-controlled repository (`data/symbol_registry.json`) defining, validating, retrieving, and tracking mathematical and temporal symbols used during formalization.
+- **Key Principles:**
+  - Authoritative source for registered symbol definitions; prevents LLMs from silently redefining registered symbols.
+  - Scoped Isolation: Supports `global` symbols (e.g., standard LTL operators `G`, `F`, `X`, `U`, propositional connectives) as well as requirement-scoped symbols (e.g., `loss_of_comm`, `outputs_disabled` scoped strictly to `[SRS178]`).
+  - Deterministic Validation: Enforces unique identifiers, prevents duplicate spellings and alias collisions within the same scope, and allows legitimate different meanings across distinct scopes.
+  - Additive Context Integration: `ContextBuilder` and future `Master Orchestrator` can optionally retrieve symbols relevant to a requirement and inject them into `ContextPackage.symbols` with explicit provenance.
+  - Deterministic Consistency Validator (`SymbolValidator`): Scans candidate formalizations to detect references to out-of-scope requirement symbols, conflicting symbol definitions, and unregistered domain identifiers.
+  - Model Consumption Contracts:
+    - **Analyst Model:** Recognizes existing terminology in raw requirements and identifies symbol references against the registry.
+    - **Reasoning Model:** Reuses registered canonical symbols, preserves their mathematical definitions, and avoids inventing ad-hoc syntax for standard operators.
+    - **Critic Model:** Uses `SymbolValidator` to check symbol reuse fidelity, flag out-of-scope leaks, detect conflicting symbol definitions, and challenge unsupported symbol proliferation.
 
 ---
 
