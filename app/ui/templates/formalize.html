@@ -33,10 +33,6 @@
 
             <!-- Execution Action Controls -->
             <form action="{{ url_for('formalize_requirement', req_id=req.id) }}" method="POST" class="d-flex align-items-center gap-2">
-                <div class="form-check form-switch me-2" title="Use fast deterministic mock models for instant offline verification">
-                    <input class="form-check-input" type="checkbox" id="mockMode" name="mock_mode" value="1" {% if request.args.get('mock') == '1' or not result %}checked{% endif %}>
-                    <label class="form-check-label small text-muted" for="mockMode">Fast Mode</label>
-                </div>
                 <input type="hidden" name="max_revisions" value="2">
                 <button type="submit" class="btn btn-success font-weight-bold">
                     <i class="bi bi-play-circle-fill me-1"></i>{% if result %}Re-Run Pipeline{% else %}Run Formalization{% endif %}
@@ -51,11 +47,13 @@
     <!-- Alert / Status Banner -->
     {% if result %}
         {% if result.success %}
-            <div class="alert {% if result.status == 'PASS' %}alert-success{% elif result.status == 'BLOCKED' %}alert-danger{% else %}alert-warning{% endif %} d-flex justify-content-between align-items-center mb-4 shadow-sm" role="alert">
+            {% set info = classify_result(result) %}
+            <div class="alert alert-{{ info.css }} d-flex justify-content-between align-items-center mb-4 shadow-sm" role="alert">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi {% if result.status == 'PASS' %}bi-check-circle-fill fs-4{% elif result.status == 'BLOCKED' %}bi-x-octagon-fill fs-4{% else %}bi-exclamation-triangle-fill fs-4{% endif %}"></i>
                     <div>
                         <strong>Pipeline Status: {{ result.status }}</strong> &mdash; {{ result.termination_reason }}
+                        {% if info.label != result.status %}<span class="badge bg-{{ info.css }} ms-1">{{ info.label }}</span>{% endif %}
                         <div class="small text-muted">{{ result.critic_summary }}</div>
                     </div>
                 </div>
@@ -73,6 +71,12 @@
             Click <strong>Run Formalization</strong> to execute the complete end-to-end pipeline:
             <code>SQLite &rarr; Analyst &rarr; ContextBuilder (Obsidian + Symbols) &rarr; Reasoning &rarr; Critic &rarr; RevisionManager &rarr; Clarifications</code>.
         </div>
+    {% endif %}
+
+    {% if result and from_cache %}
+        <div class="alert alert-secondary py-2 small"><i class="bi bi-archive me-1"></i>Showing the stored result{% if saved_at %} from {{ saved_at }} (UTC){% endif %}. Opening this page does not re-run the pipeline; use <strong>Re-Run Pipeline</strong> to produce a new result.</div>
+    {% elif result %}
+        <div class="alert alert-secondary py-2 small"><i class="bi bi-play-circle me-1"></i>This result comes from the run you just started.</div>
     {% endif %}
 
     <!-- Target Requirement Source Card -->
@@ -135,6 +139,21 @@
                     </div>
 
                     <div class="mb-4">
+                        <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Deterministic Validation</h6>
+                        {% if result.validation_valid is none %}
+                            <p class="small text-muted mb-0">Validation was not recorded for this result.</p>
+                        {% elif result.validation_valid %}
+                            <div class="alert alert-success py-2 small mb-0">Structural validation passed.</div>
+                        {% else %}
+                            <div class="alert alert-danger py-2 small mb-2">Structural validation FAILED. This formula is not accepted as valid, regardless of the critic's assessment.</div>
+                            <ul class="small mb-0">
+                                {% for vf in result.validation_findings %}<li><span class="badge bg-danger me-1">{{ vf.rule }}</span>{{ vf.description }}</li>{% endfor %}
+                            </ul>
+                        {% endif %}
+                        <p class="small text-muted mt-2 mb-0">Structural check only: it does not establish that the formula is semantically correct for the requirement.</p>
+                    </div>
+
+                    <div class="mb-4">
                         <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Natural Language Interpretation</h6>
                         <p class="text-dark">{{ result.interpretation or "N/A" }}</p>
                     </div>
@@ -183,6 +202,10 @@
                                 {% else %}<span class="text-muted small">None</span>{% endif %}
                             </div>
                         </div>
+                    </div>
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-6"><div class="border rounded p-3 h-100"><h6 class="small text-success">Assumptions</h6>{% if result.assumptions %}<ul class="small mb-0">{% for item in result.assumptions %}<li>{{ item }}</li>{% endfor %}</ul>{% else %}<span class="small text-muted">None recorded.</span>{% endif %}</div></div>
+                        <div class="col-md-6"><div class="border rounded p-3 h-100"><h6 class="small text-success">Unresolved items</h6>{% if result.unresolved_items %}<ul class="small mb-0">{% for item in result.unresolved_items %}<li>{{ item }}</li>{% endfor %}</ul>{% else %}<span class="small text-muted">None recorded.</span>{% endif %}</div></div>
                     </div>
                 </div>
 
@@ -235,13 +258,18 @@
                     {% endif %}
 
                     <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Retrieved Knowledge Notes (Obsidian Vault)</h6>
-                    {% if result.retrieved_files %}
-                        <ul class="small font-monospace ps-3">
-                            {% for fpath in result.retrieved_files %}<li>{{ fpath }}</li>{% endfor %}
-                        </ul>
+                    <p class="small text-muted">Retrieved notes were included in context. They are not necessarily explicitly referenced or demonstrably used by the model.</p>
+                    {% if result.retrieved_notes %}
+                        <div class="accordion">
+                        {% for note in result.retrieved_notes %}<div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed py-2" data-bs-toggle="collapse" data-bs-target="#note{{ loop.index }}"><code>{{ note.path }}</code> <span class="ms-2 badge bg-light text-dark">{{ note.role }}</span></button></h2><div id="note{{ loop.index }}" class="accordion-collapse collapse"><pre class="accordion-body small mb-0 text-wrap">{{ note.content }}</pre></div></div>{% endfor %}
+                        </div>
+                    {% elif result.retrieved_files %}
+                        <ul class="small font-monospace ps-3">{% for fpath in result.retrieved_files %}<li>{{ fpath }} <span class="text-muted">(content was not recorded)</span></li>{% endfor %}</ul>
                     {% else %}
-                        <p class="text-muted small">No knowledge files loaded.</p>
+                        <p class="text-muted small">No knowledge files were recorded.</p>
                     {% endif %}
+                    <h6 class="text-uppercase text-muted small font-weight-bold mt-4">Provenance</h6>
+                    {% if result.provenance %}<pre class="small bg-light border p-2">{{ result.provenance | tojson(indent=2) }}</pre>{% else %}<p class="small text-muted">No provenance was recorded.</p>{% endif %}
                 </div>
 
                 <!-- 4. Critic & Revisions Tab -->
@@ -292,6 +320,7 @@
                                         <div class="accordion-body small bg-light">
                                             <p class="mb-1"><strong>Candidate Formalization:</strong> <code>{{ rev.reasoning_result.formalization }}</code></p>
                                             <p class="mb-1 text-muted"><strong>Critic Summary:</strong> {{ rev.critic_result.summary }}</p>
+                                            {% for f in rev.critic_result.findings %}<div class="small"><span class="badge bg-secondary me-1">{{ f.severity }}</span>{{ f.description }}</div>{% endfor %}
                                         </div>
                                     </div>
                                 </div>
@@ -309,22 +338,55 @@
                                 <div class="card border">
                                     <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
                                         <span class="badge bg-secondary font-monospace">{{ cq.question_id }}</span>
-                                        <span class="badge bg-warning text-dark">{{ cq.category }}</span>
+                                        <span>
+                                            <span class="badge {% if cq.status == 'ANSWERED' %}bg-success{% else %}bg-info text-dark{% endif %} me-1">{{ cq.status or 'OPEN' }}</span>
+                                            <span class="badge bg-warning text-dark">{{ cq.category }}</span>
+                                        </span>
                                     </div>
                                     <div class="card-body p-3">
                                         <h6 class="card-title text-dark font-weight-bold mb-2">{{ cq.question_text }}</h6>
                                         <p class="card-text small text-muted mb-3"><i class="bi bi-info-circle me-1"></i>Rationale: {{ cq.reason }}</p>
                                         
-                                        {% if cq.suggested_options %}
-                                            <div class="bg-light p-2 rounded">
-                                                <small class="font-weight-bold text-dark d-block mb-1">Suggested Engineering Options:</small>
-                                                {% for opt in cq.suggested_options %}
-                                                    <div class="form-check form-check-inline me-3">
-                                                        <input class="form-check-input" type="radio" name="opt_{{ cq.question_id }}" id="opt_{{ cq.question_id }}_{{ loop.index }}" value="{{ opt }}" disabled>
-                                                        <label class="form-check-label small" for="opt_{{ cq.question_id }}_{{ loop.index }}">{{ opt }}</label>
-                                                    </div>
-                                                {% endfor %}
+                                        {% if cq.status == 'ANSWERED' %}
+                                            <div class="alert alert-success d-flex align-items-start py-2 mb-0" role="alert">
+                                                <i class="bi bi-check-circle-fill me-2 fs-5 text-success"></i>
+                                                <div class="w-100">
+                                                    <div class="font-weight-bold">Recorded Stakeholder Resolution:</div>
+                                                    <div class="mt-1 font-monospace small bg-white p-2 rounded border">{{ cq.answer }}</div>
+                                                    {% if cq.answered_at %}
+                                                        <div class="small text-muted mt-1"><i class="bi bi-clock me-1"></i>Recorded at {{ cq.answered_at }}</div>
+                                                    {% endif %}
+                                                </div>
                                             </div>
+                                        {% else %}
+                                            <form action="{{ url_for('answer_clarification', req_id=req.id) }}" method="POST">
+                                                <input type="hidden" name="question_id" value="{{ cq.question_id }}">
+                                                <div class="bg-light p-3 rounded mb-3 border">
+                                                    <small class="font-weight-bold text-dark d-block mb-2">Select Resolution Option:</small>
+                                                    {% for opt in cq.suggested_options %}
+                                                        <div class="form-check mb-2">
+                                                            <input class="form-check-input" type="radio" name="answer" id="opt_{{ cq.question_id }}_{{ loop.index }}" value="{{ opt }}" required>
+                                                            <label class="form-check-label small" for="opt_{{ cq.question_id }}_{{ loop.index }}">{{ opt }}</label>
+                                                        </div>
+                                                    {% endfor %}
+                                                    <div class="form-check mb-2">
+                                                        <input class="form-check-input" type="radio" name="answer" id="opt_{{ cq.question_id }}_custom" value="__custom__">
+                                                        <label class="form-check-label small" for="opt_{{ cq.question_id }}_custom">Specify custom stakeholder resolution:</label>
+                                                    </div>
+                                                    <div class="mt-2 ps-4">
+                                                        <input type="text" class="form-control form-control-sm" name="custom_answer" placeholder="Enter custom clarification text...">
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <button type="submit" class="btn btn-sm btn-primary">
+                                                        <i class="bi bi-check2-circle me-1"></i>Save Answer
+                                                    </button>
+                                                    <div class="form-check form-check-inline ms-2 mb-0">
+                                                        <input class="form-check-input" type="checkbox" name="rerun" value="1" id="rerun_{{ cq.question_id }}">
+                                                        <label class="form-check-label small text-muted" for="rerun_{{ cq.question_id }}">Re-run formalization with updated context</label>
+                                                    </div>
+                                                </div>
+                                            </form>
                                         {% endif %}
                                     </div>
                                 </div>

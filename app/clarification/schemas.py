@@ -17,6 +17,8 @@ class ClarificationQuestion:
     related_constraint: str
     suggested_options: List[str] = field(default_factory=list)
     status: str = "OPEN"  # "OPEN", "ANSWERED"
+    answer: Optional[str] = None
+    answered_at: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert ClarificationQuestion to a dictionary."""
@@ -29,6 +31,8 @@ class ClarificationQuestion:
             "related_constraint": self.related_constraint,
             "suggested_options": list(self.suggested_options),
             "status": self.status,
+            "answer": self.answer,
+            "answered_at": self.answered_at,
         }
 
     @classmethod
@@ -44,6 +48,8 @@ class ClarificationQuestion:
             related_constraint=str(data.get("related_constraint", "")),
             suggested_options=[str(opt) for opt in raw_options] if isinstance(raw_options, list) else [],
             status=str(data.get("status", "OPEN")),
+            answer=data.get("answer"),
+            answered_at=data.get("answered_at"),
         )
 
 

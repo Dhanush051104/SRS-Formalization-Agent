@@ -1,6 +1,12 @@
 import os
 import sys
 import sqlite3
+import json
+import logging
+from http.client import HTTPException
+from urllib.error import URLError
+from urllib.request import ProxyHandler, build_opener
+from datetime import datetime, timezone
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash
 
@@ -20,11 +26,165 @@ from app.db.target_service import (
     remove_requirement_from_group,
     cancel_target_group
 )
+from app.ui.model_config import load_model_config, save_model_config
+from app.ui.result_store import get as get_saved_result, get_saved_at, save as save_result
+from app.ui import history_store
+
+logger = logging.getLogger(__name__)
+
+OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
+MIN_REVISIONS = 1
+MAX_REVISIONS_LIMIT = 5
+# Local Ollama must never be reached through a system proxy.
+_NO_PROXY_OPENER = build_opener(ProxyHandler({}))
 
 app = Flask(__name__)
 app.secret_key = "srs_formalization_secret_key"
 UPLOAD_FOLDER = "data"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+def _open_local(url, timeout=2):
+    """Open a local URL without proxies (patched in tests so no network call is made)."""
+    return _NO_PROXY_OPENER.open(url, timeout=timeout)
+
+
+def get_installed_ollama_models():
+    """Return (installed model names, None) or ([], user-safe error message)."""
+    try:
+        with _open_local(OLLAMA_TAGS_URL, timeout=2) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        models = data.get("models") if isinstance(data, dict) else None
+        if not isinstance(models, list):
+            raise ValueError("unexpected /api/tags response shape")
+        names = sorted({item["name"] for item in models if isinstance(item, dict) and item.get("name")})
+        return names, None
+    except (URLError, OSError, HTTPException, ValueError, AttributeError, TypeError) as exc:
+        logger.warning("Could not read installed Ollama models from %s: %s", OLLAMA_TAGS_URL, exc)
+        return [], f"Ollama is unavailable or returned invalid installed-model data: {exc}"
+
+
+def build_configured_pipeline():
+    models = load_model_config()
+    installed, error = get_installed_ollama_models()
+    if error:
+        raise RuntimeError(error)
+    missing = sorted({name for name in models.values() if name not in installed})
+    if missing:
+        raise RuntimeError(
+            f"Configured Ollama model(s) are not installed: {', '.join(missing)}. "
+            "Choose installed models on the Model settings page."
+        )
+    from app.pipeline import FormalizationPipeline
+    from app.analyst.ollama_analyst import OllamaAnalyst
+    from app.reasoning.ollama_reasoning import OllamaReasoning
+    from app.critic.ollama_critic import OllamaCritic
+    return FormalizationPipeline(
+        analyst_model=OllamaAnalyst(model=models["analyst"]),
+        reasoning_model=OllamaReasoning(model=models["reasoning"]),
+        critic_model=OllamaCritic(model=models["critic"]),
+    )
+
+
+def parse_max_revisions(raw, default=2):
+    """Parse a revision bound from user input, clamped to [MIN_REVISIONS, MAX_REVISIONS_LIMIT]."""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(MIN_REVISIONS, min(MAX_REVISIONS_LIMIT, value))
+
+
+def _failed_result(requirement_id, stage, message):
+    from app.pipeline import PipelineResult
+    return PipelineResult(
+        requirement_id=requirement_id, global_number=0, srs_id="", section_number="",
+        section_title="", raw_text="", status="FAILED", success=False,
+        error_stage=stage, error_message=message,
+    )
+
+
+def _build_pipeline_or_error():
+    """Return (pipeline, None), or (None, message) when the configured Ollama models cannot be used."""
+    try:
+        return build_configured_pipeline(), None
+    except RuntimeError as exc:
+        logger.warning("Pipeline not started: %s", exc)
+        return None, str(exc)
+
+
+def _run_one(pipeline, requirement_id, max_revisions, clarifications=None):
+    """Run one requirement independently; any crash becomes an explicit FAILED result."""
+    try:
+        return pipeline.run(
+            requirement_id=requirement_id,
+            max_revisions=max_revisions,
+            clarifications=clarifications,
+        )
+    except Exception as exc:
+        logger.exception("Pipeline crashed for requirement %s", requirement_id)
+        return _failed_result(requirement_id, "PIPELINE", f"Unexpected pipeline exception: {exc}")
+
+
+# Failures that say nothing about a real requirement's formalization are never stored as its result.
+_UNSTORED_ERROR_STAGES = {"OLLAMA_CONFIGURATION", "SQLITE_RETRIEVAL"}
+
+
+def _store_result(result):
+    if result.error_stage not in _UNSTORED_ERROR_STAGES:
+        save_result(result)
+
+
+def classify_result(result):
+    """Distinguish failed / invalid / blocked / needs-clarification / pass for display."""
+    if isinstance(result, dict):
+        success = result.get("success", True)
+        val_valid = result.get("validation_valid")
+        status = str(result.get("status", "")).upper()
+        clarifications = result.get("clarifications") or []
+    else:
+        success = getattr(result, "success", True)
+        val_valid = getattr(result, "validation_valid", None)
+        status = str(getattr(result, "status", "")).upper()
+        clarifications = getattr(result, "clarifications", []) or []
+
+    if not success:
+        return {"label": "FAILED", "css": "danger", "icon": "bi-x-circle-fill"}
+    if val_valid is False:
+        return {"label": "INVALID FORMULA", "css": "danger", "icon": "bi-slash-circle-fill"}
+    if status == "BLOCKED":
+        return {"label": "BLOCKED", "css": "danger", "icon": "bi-x-octagon-fill"}
+    if status == "PASS":
+        has_open = any(
+            (q.get("status") if isinstance(q, dict) else getattr(q, "status", "OPEN")) == "OPEN"
+            for q in clarifications
+        )
+        if has_open:
+            return {"label": "PASS (NEEDS CLARIFICATION)", "css": "warning", "icon": "bi-question-circle-fill"}
+        return {"label": "PASS", "css": "success", "icon": "bi-check-circle-fill"}
+    return {"label": status.replace("_", " "), "css": "warning", "icon": "bi-exclamation-triangle-fill"}
+
+
+app.jinja_env.globals["classify_result"] = classify_result
+
+
+@app.route("/settings/models", methods=["GET", "POST"])
+def model_settings():
+    installed, error = get_installed_ollama_models()
+    config = load_model_config()
+    if request.method == "POST":
+        selected = {stage: request.form.get(stage, "") for stage in config}
+        invalid = [model for model in selected.values() if model not in installed]
+        if error or invalid:
+            flash(error or "Selected model is not currently installed.", "danger")
+        else:
+            save_model_config(selected)
+            flash("Model selections saved.", "success")
+            return redirect(url_for("model_settings"))
+        config = selected
+    unavailable = [] if error else sorted({name for name in config.values() if name not in installed})
+    return render_template("model_settings.html", models=installed, config=config,
+                           ollama_error=error, unavailable=unavailable)
 
 
 def get_recommendation_for_doc(conn, doc_id):
@@ -117,7 +277,8 @@ def index():
         documents.append(doc_data)
 
     conn.close()
-    return render_template("index.html", documents=documents)
+    history_stats = history_store.get_overview_stats()
+    return render_template("index.html", documents=documents, history_stats=history_stats)
 
 
 @app.route("/upload", methods=["POST"])
@@ -467,73 +628,251 @@ def formalize_requirement(req_id):
         flash(f"Requirement ID {req_id} not found in database.", "danger")
         return redirect(url_for("index"))
 
-    result = None
+    result = get_saved_result(req_id)
+    ran_now = False
     if request.method == "POST" or request.args.get("run") == "1":
-        mock_mode = (request.form.get("mock_mode") == "1") or (request.args.get("mock") == "1")
-        max_revisions = int(request.form.get("max_revisions", 2))
-
-        from app.pipeline import FormalizationPipeline
-        if mock_mode:
-            from unittest.mock import MagicMock
-            from app.analyst.analyst_model import AnalystModel
-            from app.analyst.schemas import AnalystResult
-            from app.reasoning.reasoning_model import ReasoningModel
-            from app.reasoning.schemas import ReasoningResult
-            from app.critic.critic_model import CriticModel
-            from app.critic.schemas import CriticResult, CriticFinding
-
-            mock_analyst = MagicMock(spec=AnalystModel)
-            mock_analyst.analyze.return_value = AnalystResult(
-                requirement_id=req_row["id"],
-                global_number=req_row["global_number"],
-                srs_id=req_row["srs_id"],
-                identified_patterns=["Timeout / Deadline", "Failure Handling"],
-                evidence={"Timeout / Deadline": "temporal deadline", "Failure Handling": "safety failure reaction"},
-                missing_information=[],
-            )
-
-            mock_reasoning = MagicMock(spec=ReasoningModel)
-            mock_reasoning.reason.return_value = ReasoningResult(
-                requirement_id=req_row["id"],
-                global_number=req_row["global_number"],
-                srs_id=req_row["srs_id"],
-                formalization="G(failure_event -> F[0, 10ms] safe_state)",
-                interpretation="System enters safe state within 10ms of failure event.",
-                identified_entities=["system", "controller", "outputs"],
-                predicates=["failure_event", "safe_state"],
-                conditions=["failure_event == true"],
-                actions=["activate_safety_cutoff()"],
-                temporal_constraints=["within 10ms"],
-                mathematical_constraints=["response_time <= 10ms"],
-                assumptions=["Hardware sensors detect failure within 1ms"],
-                unresolved_items=["Maximum allowable jitter tolerance"],
-            )
-
-            mock_critic = MagicMock(spec=CriticModel)
-            mock_critic.critique.return_value = CriticResult(
-                requirement_id=req_row["id"],
-                global_number=req_row["global_number"],
-                srs_id=req_row["srs_id"],
-                status="PASS",
-                summary="Formalization strictly preserves all temporal bounds and source constraints.",
-                findings=[],
-                missing_constraints=[],
-                unsupported_assumptions=["Hardware sensors detect failure within 1ms"],
-            )
-
-            pipeline = FormalizationPipeline(
-                analyst_model=mock_analyst,
-                reasoning_model=mock_reasoning,
-                critic_model=mock_critic,
-            )
+        ran_now = True
+        max_revisions = parse_max_revisions(request.form.get("max_revisions"))
+        pipeline, config_error = _build_pipeline_or_error()
+        if pipeline is None:
+            result = _failed_result(req_id, "OLLAMA_CONFIGURATION", config_error)
         else:
-            pipeline = FormalizationPipeline()
+            clarifs = result.clarifications if result else None
+            result = _run_one(pipeline, req_id, max_revisions, clarifications=clarifs)
+        _store_result(result)
+        if getattr(result, "error_stage", None) not in _UNSTORED_ERROR_STAGES:
+            history_store.record_run(
+                run_type="single",
+                requirement_ids=[req_id],
+                results=[result],
+                max_revisions=max_revisions,
+                model_config=load_model_config(),
+            )
 
-        result = pipeline.run(requirement_id=req_id, max_revisions=max_revisions)
+    # Opening Full View (GET) only reads the stored result; it never re-runs the pipeline.
+    return render_template("formalize.html", req=req_row, result=result,
+                           from_cache=not ran_now, saved_at=get_saved_at(req_id))
 
-    return render_template("formalize.html", req=req_row, result=result)
+
+@app.route("/clarify/<int:req_id>", methods=["POST"])
+def answer_clarification(req_id):
+    """
+    Records stakeholder answer for an open clarification question and persists it.
+    Optionally triggers a re-run of the formalization pipeline incorporating the answer.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM requirements WHERE id = ?;", (req_id,))
+    req_row = cursor.fetchone()
+    conn.close()
+
+    if not req_row:
+        flash(f"Requirement ID {req_id} not found in database.", "danger")
+        return redirect(url_for("index"))
+
+    stored = get_saved_result(req_id)
+    if not stored:
+        flash(f"No existing formalization found for requirement ID {req_id}.", "warning")
+        return redirect(url_for("formalize_requirement", req_id=req_id))
+
+    question_id = request.form.get("question_id", "").strip()
+    selected_answer = request.form.get("answer", "").strip()
+    custom_answer = request.form.get("custom_answer", "").strip()
+
+    if selected_answer == "__custom__" or (not selected_answer and custom_answer):
+        chosen_answer = custom_answer
+    else:
+        chosen_answer = selected_answer
+
+    if not chosen_answer:
+        flash("Please select an option or provide a custom answer for the clarification question.", "warning")
+        return redirect(url_for("formalize_requirement", req_id=req_id))
+
+    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    found = False
+    for q in stored.clarifications:
+        if q.get("question_id") == question_id:
+            q["status"] = "ANSWERED"
+            q["answer"] = chosen_answer
+            q["answered_at"] = now_iso
+            found = True
+            break
+
+    if not found:
+        flash(f"Clarification question {question_id} not found in saved results.", "danger")
+        return redirect(url_for("formalize_requirement", req_id=req_id))
+
+    save_result(stored)
+    history_store.update_clarification_in_history(
+        requirement_id=req_id,
+        question_id=question_id,
+        answer=chosen_answer,
+        answered_at=now_iso,
+    )
+
+    rerun = request.form.get("rerun") == "1"
+    if rerun:
+        pipeline, config_error = _build_pipeline_or_error()
+        if pipeline is None:
+            flash(f"Clarification answer recorded, but pipeline could not be started: {config_error}", "warning")
+        else:
+            max_revisions = parse_max_revisions(request.form.get("max_revisions", 2))
+            new_res = _run_one(pipeline, req_id, max_revisions, clarifications=stored.clarifications)
+            if new_res.success:
+                _store_result(new_res)
+                history_store.record_run(
+                    run_type="single",
+                    requirement_ids=[req_id],
+                    results=[new_res],
+                    max_revisions=max_revisions,
+                    model_config=load_model_config(),
+                )
+                flash("Clarification answer recorded and formalization successfully re-run.", "success")
+            else:
+                flash("Clarification answer recorded, but re-run failed. Preserving previous result.", "warning")
+    else:
+        flash("Clarification answer recorded successfully.", "success")
+
+    return redirect(url_for("formalize_requirement", req_id=req_id))
+
+
+@app.route("/formalize/batch", methods=["GET", "POST"])
+def batch_formalize():
+    """
+    Processes a batch of requirement IDs through the real configured pipeline sequentially.
+    Each requirement is run independently; a failure on one never stops or alters the others.
+
+    POST params:
+        requirement_ids  — one or more integer requirement IDs (repeated field)
+        max_revisions    — integer, clamped to 1..5 (default 2)
+        group_id         — optional integer, used only for breadcrumb / re-run form
+    """
+    # Support both GET (re-run link from group page) and POST (form submission)
+    if request.method == "GET":
+        req_ids_raw = request.args.getlist("requirement_ids")
+        max_revisions = parse_max_revisions(request.args.get("max_revisions"))
+        group_id = request.args.get("group_id", type=int)
+    else:
+        req_ids_raw = request.form.getlist("requirement_ids")
+        max_revisions = parse_max_revisions(request.form.get("max_revisions"))
+        group_id = request.form.get("group_id", type=int)
+
+    if not req_ids_raw:
+        flash("No requirement IDs provided for batch formalization.", "danger")
+        return redirect(url_for("index"))
+
+    # Parse and deduplicate, preserving order
+    seen = set()
+    req_ids = []
+    skipped_invalid = []
+    duplicates_removed = 0
+    for raw in req_ids_raw:
+        try:
+            rid = int(raw)
+        except (ValueError, TypeError):
+            skipped_invalid.append(raw)
+            continue
+        if rid in seen:
+            duplicates_removed += 1
+            continue
+        seen.add(rid)
+        req_ids.append(rid)
+
+    if not req_ids:
+        ignored = ", ".join(repr(raw) for raw in skipped_invalid)
+        flash(f"No valid integer requirement IDs provided (ignored: {ignored}).", "danger")
+        return redirect(url_for("index"))
+
+    pipeline, config_error = _build_pipeline_or_error()
+
+    results = []
+    for rid in req_ids:
+        if pipeline is None:
+            res = _failed_result(rid, "OLLAMA_CONFIGURATION", config_error)
+        else:
+            stored = get_saved_result(rid)
+            clarifs = stored.clarifications if stored else None
+            res = _run_one(pipeline, rid, max_revisions, clarifications=clarifs)
+        results.append(res)
+        _store_result(res)
+
+    # Record completed batch run in persistent history store
+    if any(getattr(r, "error_stage", None) not in _UNSTORED_ERROR_STAGES for r in results):
+        history_store.record_run(
+            run_type="batch",
+            requirement_ids=req_ids,
+            results=results,
+            max_revisions=max_revisions,
+            group_id=group_id,
+            model_config=load_model_config(),
+        )
+
+    summary = {}
+    for res in results:
+        info = classify_result(res)
+        entry = summary.setdefault(info["label"], {"count": 0, "css": info["css"]})
+        entry["count"] += 1
+
+    return render_template(
+        "batch_formalize.html",
+        results=results,
+        req_ids=req_ids,
+        max_revisions=max_revisions,
+        group_id=group_id,
+        summary=summary,
+        skipped_invalid=skipped_invalid,
+        duplicates_removed=duplicates_removed,
+    )
+
+
+@app.route("/history")
+def history_dashboard():
+    """
+    Displays the persistent formalization history dashboard.
+    Includes overview statistics, reverse-chronological run ledger, and searchable results explorer.
+    """
+    stats = history_store.get_overview_stats()
+    run_type_filter = request.args.get("type", "").strip()
+    status_filter = request.args.get("status", "").strip()
+    search_query = request.args.get("q", "").strip()
+
+    runs = history_store.get_runs(
+        run_type=run_type_filter if run_type_filter else None,
+        status_filter=status_filter if status_filter else None,
+        search_query=search_query if search_query else None,
+    )
+
+    unique_results = history_store.get_all_unique_results(
+        search_query=search_query if search_query else None,
+        status_filter=status_filter if status_filter else None,
+    )
+
+    return render_template(
+        "history.html",
+        stats=stats,
+        runs=runs,
+        unique_results=unique_results,
+        run_type_filter=run_type_filter,
+        status_filter=status_filter,
+        search_query=search_query,
+    )
+
+
+@app.route("/history/run/<run_id>")
+def history_run_detail(run_id):
+    """
+    Inspects an individual historical formalization run (single or batch) without re-running models.
+    """
+    run = history_store.get_run(run_id)
+    if not run:
+        flash(f"Run ID '{run_id}' not found in history store.", "warning")
+        return redirect(url_for("history_dashboard"))
+
+    return render_template(
+        "history_run_detail.html",
+        run=run,
+    )
 
 
 if __name__ == "__main__":
     app.run(debug=True, host="127.0.0.1", port=5000)
-

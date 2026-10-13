@@ -1,24 +1,43 @@
 # SRS Formalization Agent
 
-The **SRS Formalization Agent** is a research and prototyping platform designed to ingest natural-language Software Requirements Specifications (SRS) documents and translate their requirements into mathematical logic specifications (e.g., predicates, constraints, and LTL temporal logic). 
+The **SRS Formalization Agent** is an engineering AI platform designed to ingest natural-language Software Requirements Specifications (SRS) documents and translate their requirements into mathematical logic specifications (predicates, constraints, and LTL temporal logic).
 
-This repository currently implements the core **deterministic document parsing, structuring, database indexing, and target group selection layers** (Milestones 1 & 2), preparing the system for integration with future AI Analyst and Reasoning models.
+The platform pairs a deterministic document ingestion and knowledge retrieval foundation with local AI models (via Ollama) orchestrated through a bounded revision loop, deterministic structural & symbol validators, and an interactive stakeholder clarification manager.
 
 ---
 
-## 1. Architectural Concept & Status
+## 1. Architectural Concept & Subsystems
 
-### Core Architectural Principle
-To maintain traceability and validation integrity, the system divides execution into:
-* **Deterministic Document Foundation:** Parser, structurer, and SQLite index are 100% deterministic, preserving exact source elements, sections, and pages.
-* **Probabilistic Reasoning plugins:** AI models responsible for analyzing context and generating formal specifications are designed as **swappable plugins** using Python Abstract Base Classes (ABCs).
+```
+Document Ingestion (PDF/DOCX)
+          ↓
+Canonical SQLite Store (`srs_canonical.db`)
+          ↓
+Requirement Selection & Target Groups
+          ↓
+Analyst Model (Identifies structural patterns: Invariant, Periodic, Timeout, etc.)
+          ↓
+ContextBuilder (Retrieves Obsidian Vault notes + Canonical Symbol Registry)
+          ↓
+Reasoning Model (Synthesizes candidate LTL formulas, predicates, constraints)
+          ↓
+Critic Model & Structural/Symbol Validators (Independent audit of correctness & scoping)
+          ↓
+RevisionManager (Bounded feedback revision loop)
+          ↓
+ClarificationManager (Deterministic question synthesis & answer persistence)
+          ↓
+Result Store (`data/result_cache.json`)
+          ↓
+Flask Web UI (Full View formalization dashboard, batch runner, model config)
+```
 
-This design ensures that the model backend (local APIs, remote GPUs, or different providers) can be swapped without changing any core application code.
-
-### Status of Milestones
-* **[COMPLETED] Milestone 1: Ingestion & Canonical SQLite Store:** Lossless extraction of document text elements, section structural hierarchy tree, and Section Browser web UI.
-* **[COMPLETED] Milestone 2: Target Requirement / Target Group:** Selection and grouping of canonical requirements to form a boundary target for reasoning, validating unique section bounds and document constraints.
-* **[IN PROGRESS] Milestone 3: Python Orchestrator & Swappable Plugins:** Interface designs for swappable models (`AnalystModel`, `ReasoningModel`) and orchestration workflow loops.
+### Core Design Principles
+* **Deterministic Foundation:** Document parsing, structuring, SQLite storage, Obsidian retrieval, symbol scoping, and clarification tracking are 100% deterministic, maintaining complete traceability and provenance.
+* **Authoritative Symbol Registry:** Mathematical, temporal, and requirement-scoped domain symbols are strictly governed by `data/symbol_registry.json`. Models cannot silently redefine symbols.
+* **Defense-in-Depth Validation:** Structural grammar validation and deterministic symbol scope auditing prevent formulas from passing when syntax is broken or symbols leak across scopes.
+* **Interactive Clarification Loop:** Unresolved parameters and Critic findings synthesize structured stakeholder questions with selectable options and custom text inputs. Recorded resolutions persist across runs and inform subsequent reasoning passes.
+* **Zero Production Mocks:** Production code executes real pipeline components without synthetic fast-paths.
 
 ---
 
@@ -27,34 +46,40 @@ This design ensures that the model backend (local APIs, remote GPUs, or differen
 ```text
 SRS-Formalization-Agent/
 ├── app/                        # Application source code
+│   ├── analyst/                # Analyst pattern identification models
+│   ├── clarification/          # Clarification manager, questions, and schemas
+│   ├── critic/                 # Independent Critic validation models & findings
 │   ├── db/                     # Canonical store and Target Group service layer
 │   │   ├── canonical_store.py  # SQLite schema initialization and storage
 │   │   └── target_service.py   # Target group CRUD operations and validations
+│   ├── formalization_validator.py # Deterministic LTL syntax & structure validator
 │   ├── parser/                 # Document parsing module (PDF/DOCX extraction)
-│   │   └── document_parser.py  # Lossless text element parser
-│   ├── structurer/             # Structural organization module
-│   │   ├── document_cleaner.py # Cleans/normalizes text
-│   │   ├── document_structurer.py# Builds section tree and maps requirements
-│   │   └── requirement_segmenter.py# Reconstructs multi-element requirements
+│   ├── pipeline.py             # Master orchestrator coordinating all pipeline stages
+│   ├── reasoning/              # Reasoning formalization models & prompt builders
+│   ├── retrieval/              # SQLite & Obsidian vault knowledge retrievers
+│   ├── revision/               # Bounded iterative revision manager
+│   ├── structurer/             # Document hierarchy builder & requirement segmenter
+│   ├── symbols/                # Authoritative Symbol Registry, Retriever & Validator
 │   └── ui/                     # Flask presentation layer
+│       ├── model_config.py     # Local model configuration persistence
+│       ├── result_store.py     # Atomic persistent cache for pipeline results
 │       ├── templates/          # HTML view templates
 │       └── app.py              # Flask server routes and page rendering
-├── data/                       # Ingestible document samples
-│   └── nasaX38 SRS.pdf         # Sample NASA X-38 SRS Document
-├── docs/                       # Detailed onboarding documentation
+├── data/                       # Reference documents, registry, and caches
+│   ├── nasaX38 SRS.pdf         # Sample NASA X-38 SRS Document
+│   ├── symbol_registry.json    # Canonical Authoritative Symbol Registry
+│   └── result_cache.json       # Persistent formalization results cache
+├── docs/                       # Project documentation
 │   ├── ARCHITECTURE.md         # Detailed layer responsibilities and ABC interfaces
 │   ├── DATABASE.md             # Schema details and database query guides
-│   ├── MILESTONES.md           # Progress history and future roadmap
-│   ├── PROJECT_STATUS.md       # High-level goals and status summary
-│   └── SETUP.md                # Quick developer configuration guide
-├── tests/                      # Testing module
-│   ├── test_milestone1.py      # Milestone 1 validation tests
-│   ├── test_parser.py          # Ingestion parser diagnostic test
-│   ├── test_section_isolation.py# Section isolate boundary tests
-│   └── test_target_groups.py   # Target group unit tests
-├── requirements.txt            # Project python dependencies
+│   ├── MILESTONES.md           # Progress history across Milestones 1 through 9
+│   ├── PROJECT_STATUS.md       # Status report, verification metrics, and capabilities
+│   └── SETUP.md                # Developer configuration guide
+├── SRS-Knowledge/              # Frozen Obsidian knowledge vault (Read-only)
+├── tests/                      # Deterministic offline & live integration tests
+├── requirements.txt            # Python dependencies
 ├── run_ui.py                   # UI server startup script
-└── srs_canonical.db            # Production SQLite database file
+└── srs_canonical.db            # Canonical SQLite database file
 ```
 
 ---
@@ -62,83 +87,65 @@ SRS-Formalization-Agent/
 ## 3. Installation & Setup
 
 ### Prerequisites
-* **Python 3.10+** (Python 3.14 compatible)
-* **Windows PowerShell** terminal environment
+* **Python 3.10+** (tested on Python 3.14)
+* **Windows PowerShell** (or Bash on Unix)
+* **Ollama** (optional, for live model inference; default models: `llama3:latest`, `gemma4:e2b`, `qwen3.5:9b`)
 
-### Virtual Environment & Dependencies Configuration
-Open Windows PowerShell, clone the repository, create a virtual environment, and install dependencies:
-
+### Virtual Environment & Dependencies
 ```powershell
-# 1. Navigate into repository
+# 1. Clone repository and navigate into project directory
 cd SRS-Formalization-Agent
 
-# 2. Create virtual environment
+# 2. Create and activate virtual environment
 python -m venv .venv
-
-# 3. Activate virtual environment
 .venv\Scripts\Activate.ps1
 
-# 4. Upgrade pip and install requirements
-python -m pip install --upgrade pip
+# 3. Install dependencies
 pip install -r requirements.txt
-```
-
-Verify that packages are installed successfully by executing:
-```powershell
-pip show Flask pypdf python-docx
 ```
 
 ---
 
 ## 4. Running the Tests
 
-To prevent path errors (`ModuleNotFoundError`), **always execute tests from the project root directory** using the `python -m` flag.
+To prevent path issues, always execute test commands from the project root.
 
-### 1. Ingestion Parser Diagnostic Script
-Parses the document and displays the Section 3 hierarchy in the console:
+### Complete Offline Test Suite (216 tests)
+Runs the entire deterministic offline test suite covering all subsystems:
 ```powershell
-python -m tests.test_parser
+python -m unittest tests/test_analyst_model.py tests/test_clarification.py tests/test_context_builder.py tests/test_critic_model.py tests/test_formalization_safety.py tests/test_milestone1.py tests/test_model_settings.py tests/test_obsidian_retriever.py tests/test_parser.py tests/test_pipeline.py tests/test_reasoning_model.py tests/test_revision_manager.py tests/test_section_isolation.py tests/test_simple_requirements.py tests/test_sqlite_retriever.py tests/test_structure_debug.py tests/test_symbol_registry.py tests/test_target_groups.py
 ```
+*Current test status: **216 passed / 216 total (0 failures, 0 errors)** in ~35 seconds.*
 
-### 2. Milestone 1 Core Validation Tests
-Tests lossless ingestion, document reconstruction, requirement mappings, and numbering:
+### Individual Component Tests
 ```powershell
-python -m tests.test_milestone1
-```
-
-### 3. Section Isolation Tests
-Tests section isolation boundaries (ensuring adjacent content does not bleed into the view):
-```powershell
-python -m unittest tests/test_section_isolation.py
-```
-
-### 4. Target Group Tests
-Tests service validations, selection ordering, database UNIQUE constraints, and CRUD features:
-```powershell
+# Ingestion and canonical store
+python -m unittest tests/test_milestone1.py
 python -m unittest tests/test_target_groups.py
+
+# Symbol Registry & Scoping Validation
+python -m unittest tests/test_symbol_registry.py
+
+# Clarification Workflow & State Transitions
+python -m unittest tests/test_clarification.py
+
+# Pipeline Orchestration, Full View & Batch Routes
+python -m unittest tests/test_pipeline.py
 ```
 
 ---
 
-## 5. Running the Web UI & Database Details
+## 5. Running the Web Application
 
-Start the Flask server:
+Start the Flask application:
 ```powershell
 python run_ui.py
 ```
+Open a browser and navigate to: `http://127.0.0.1:5000/`
 
-Open your browser and navigate to: `http://127.0.0.1:5000/`
-
-* **Database File:** On startup, the SQLite database is created/accessed at `srs_canonical.db` in the repository root.
-* **Database Inspection:** Because the database remains tracked in Git to preserve the parsed NASA X-38 SRS, you can query it via terminal CLI (`sqlite3 srs_canonical.db`) or browse it visually using **DB Browser for SQLite** (DB4S). See [`docs/DATABASE.md`](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/docs/DATABASE.md) for query examples.
-
----
-
-## 6. Detailed Project Onboarding Documents
-
-Please refer to the following files in the `docs/` folder for deeper onboarding reading:
-1. [**Project Status Overview** (`docs/PROJECT_STATUS.md`)](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/docs/PROJECT_STATUS.md) — Main executive summary, validation metrics, and model swap strategy.
-2. [**Architecture Guide** (`docs/ARCHITECTURE.md`)](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/docs/ARCHITECTURE.md) — Technical details of layer responsibilities and ABC plugin class code definitions.
-3. [**Setup and Execution** (`docs/SETUP.md`)](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/docs/SETUP.md) — PowerShell setup instructions, test commands, outputs, and troubleshooting.
-4. [**Database Documentation** (`docs/DATABASE.md`)](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/docs/DATABASE.md) — Schema layers, columns, constraints, and inspector guides.
-5. [**Milestone History** (`docs/MILESTONES.md`)](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/docs/MILESTONES.md) — Active roadmap and completed milestones.
+### Key Web Features
+- **Document Explorer (`/`):** Browse the hierarchical section tree, view parsed requirements, and see starting section recommendations.
+- **Target Groups (`/target_group/<id>`):** Select sets of requirements, manage group membership, and launch batch formalizations.
+- **Full View Formalization Dashboard (`/formalize/<id>`):** Inspect mathematical LTL formalizations, deterministic syntax validation reports, natural language interpretations, analyst patterns, canonical symbols, revision history, and interactive stakeholder clarification forms.
+- **Batch Formalization (`/formalize/batch`):** Sequentially formalize batches of requirements with real-time status summary badges (`PASS`, `PASS (NEEDS CLARIFICATION)`, `INVALID FORMULA`, `BLOCKED`, `FAILED`).
+- **Model Settings (`/settings/models`):** Configure installed Ollama models for Analyst, Reasoning, and Critic roles.

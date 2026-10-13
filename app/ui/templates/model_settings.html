@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Model settings | SRS Formalization Agent{% endblock %}
+{% block content %}
+<div class="container py-4"><h3>Ollama model settings</h3>
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+{% endwith %}
+{% if ollama_error %}
+<div class="alert alert-danger">{{ ollama_error }}
+    <div class="small mt-1">Start Ollama and reload this page. Real formalization runs fail until the configured models can be verified; no substitute model is used.</div>
+</div>
+{% elif not models %}
+<div class="alert alert-warning">Ollama is running but reports no installed models. Install a model locally, then reload this page.</div>
+{% endif %}
+{% if unavailable %}
+<div class="alert alert-warning">Configured but not installed: <code>{{ unavailable | join(', ') }}</code>. Choose installed models below and save; formalization runs fail until you do.</div>
+{% endif %}
+<p class="text-muted">Choose installed local models independently for each pipeline stage.</p>
+<form method="post" class="card card-body">
+{% for stage in ['analyst', 'reasoning', 'critic'] %}
+<label class="form-label text-capitalize" for="{{ stage }}">{{ stage }}</label>
+<select class="form-select mb-3" id="{{ stage }}" name="{{ stage }}" required {% if not models %}disabled{% endif %}>
+{% if models and config[stage] not in models %}<option value="" selected disabled>-- choose an installed model --</option>{% endif %}
+{% for model in models %}<option value="{{ model }}" {% if config[stage] == model %}selected{% endif %}>{{ model }}</option>{% endfor %}
+</select>{% endfor %}
+<button class="btn btn-success" {% if not models %}disabled{% endif %}>Save model choices</button>
+</form></div>{% endblock %}

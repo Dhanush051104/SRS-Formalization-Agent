@@ -3,6 +3,20 @@
 {% block title %}Dashboard - SRS Formalization Agent{% endblock %}
 
 {% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="row mt-3">
+        <div class="col-md-8 mx-auto">
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show shadow-sm" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+{% endwith %}
 <div class="row my-4">
     <div class="col-md-8 mx-auto">
         <!-- Banner/Intro -->
@@ -31,6 +45,32 @@
             </div>
         </div>
 
+        <!-- Formalization History Card -->
+        <div class="card mb-4 shadow-sm border-0" style="background: linear-gradient(135deg, #e8f5e9 0%, #ffffff 100%); border-left: 5px solid #198754 !important;">
+            <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                    <h5 class="text-success font-weight-bold mb-1">
+                        <i class="bi bi-clock-history me-2"></i>Formalization History &amp; Results
+                    </h5>
+                    <p class="text-muted small mb-0">
+                        Access all previously generated formalization formulas, critic findings, and clarification answers without re-running models.
+                    </p>
+                    {% if history_stats and history_stats.total_runs > 0 %}
+                    <div class="mt-2 small text-muted">
+                        <span class="badge bg-success me-1">{{ history_stats.total_runs }} run(s)</span>
+                        <span class="badge bg-secondary me-1">{{ history_stats.unique_requirements_count }} formalized req(s)</span>
+                        <span class="badge bg-info text-dark">{{ history_stats.total_evaluations }} total evaluation(s)</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <div>
+                    <a href="{{ url_for('history_dashboard') }}" class="btn btn-success font-weight-bold shadow-sm">
+                        <i class="bi bi-eye-fill me-1"></i>View Formalization History
+                    </a>
+                </div>
+            </div>
+        </div>
+
         <!-- Ingested Documents List -->
         <div class="card shadow-sm">
             <div class="card-header bg-dark text-white">
@@ -54,7 +94,7 @@
                                 <td class="px-4 font-weight-bold">
                                     <i class="bi bi-file-pdf-fill text-danger me-2"></i>{{ doc.filename }}
                                 </td>
-                                <td>{{ doc.uploaded_at | replace("T", " ") | slice(0, 19) }}</td>
+                                <td>{{ ((doc.uploaded_at or "") | string | replace("T", " "))[:19] }}</td>
                                 <td>
                                     {% if doc.recommended_section %}
                                     <span class="badge bg-success">

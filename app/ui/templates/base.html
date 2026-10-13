@@ -77,10 +77,28 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/"><i class="bi bi-house-door-fill me-1"></i>Dashboard</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('history_dashboard') }}"><i class="bi bi-clock-history me-1"></i>Formalization History</a>
+                    </li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('model_settings') }}">Model settings</a></li>
                 </ul>
             </div>
         </div>
     </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="container-fluid mt-2">
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
 
     <!-- Main Content Container -->
     <div class="container-fluid">

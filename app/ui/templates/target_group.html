@@ -113,11 +113,19 @@
                     </p>
                     <div class="d-grid gap-2 mt-4">
                         {% if target_group.requirements %}
-                            <a href="{{ url_for('formalize_requirement', req_id=target_group.requirements[0].id) }}" class="btn btn-success font-weight-bold">
-                                <i class="bi bi-play-circle-fill me-1"></i>Begin Formalization
-                            </a>
+                            <form action="{{ url_for('batch_formalize') }}" method="POST">
+                                {% for req in target_group.requirements %}
+                                <input type="hidden" name="requirement_ids" value="{{ req.id }}">
+                                {% endfor %}
+                                <input type="hidden" name="group_id" value="{{ target_group.id }}">
+                                <input type="hidden" name="max_revisions" value="2">
+                                <button type="submit" class="btn btn-success font-weight-bold w-100">
+                                    <i class="bi bi-play-circle-fill me-1"></i>Begin Formalization
+                                    <span class="badge bg-white text-success ms-1">{{ target_group.requirements | length }} req(s)</span>
+                                </button>
+                            </form>
                             <small class="text-muted text-center" style="font-size: 0.8rem;">
-                                Formalizes primary target: <strong>{{ target_group.requirements[0].srs_id }}</strong>
+                                All {{ target_group.requirements | length }} selected requirement(s) will be processed sequentially.
                             </small>
                         {% else %}
                             <button class="btn btn-secondary font-weight-bold" disabled>

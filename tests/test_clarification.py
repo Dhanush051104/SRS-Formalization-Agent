@@ -145,6 +145,116 @@ class TestClarificationManager(unittest.TestCase):
         self.assertEqual(q.question_id, q_roundtrip.question_id)
         self.assertEqual(q.suggested_options, q_roundtrip.suggested_options)
 
+    def test_preserve_answered_clarifications(self):
+        reasoning = ReasoningResult(
+            requirement_id=8,
+            global_number=8,
+            srs_id="[SRS178]",
+            formalization="G(comm_lost -> F safe_state)",
+            unresolved_items=["Maximum allowable jitter tolerance"],
+        )
+        existing = [
+            {
+                "question_id": "CLARIFY-SRS178-01",
+                "requirement_srs_id": "[SRS178]",
+                "category": "UNRESOLVED_ITEM",
+                "question_text": "How should unresolved item 'Maximum allowable jitter tolerance' be formally specified for [SRS178]?",
+                "reason": "Test reason",
+                "related_constraint": "Maximum allowable jitter tolerance",
+                "suggested_options": ["Option A", "Option B"],
+                "status": "ANSWERED",
+                "answer": "Option A: 2ms maximum jitter bound",
+                "answered_at": "2026-10-13T10:00:00Z",
+            }
+        ]
+
+        res = self.manager.generate_clarifications(
+            requirement_context=self.req_context,
+            reasoning_result=reasoning,
+            existing_clarifications=existing,
+        )
+
+        self.assertEqual(res.total_questions, 1)
+        self.assertEqual(res.open_questions, 0)
+        q = res.questions[0]
+        self.assertEqual(q.status, "ANSWERED")
+        self.assertEqual(q.answer, "Option A: 2ms maximum jitter bound")
+        self.assertEqual(q.answered_at, "2026-10-13T10:00:00Z")
+
+    def test_append_previously_answered_not_reflagged(self):
+        reasoning = ReasoningResult(
+            requirement_id=8,
+            global_number=8,
+            srs_id="[SRS178]",
+            formalization="G(comm_lost -> F safe_state)",
+            unresolved_items=["New parameter X"],
+        )
+        existing = [
+            {
+                "question_id": "CLARIFY-SRS178-01",
+                "requirement_srs_id": "[SRS178]",
+                "category": "UNRESOLVED_ITEM",
+                "question_text": "Previous question",
+                "reason": "Previous reason",
+                "related_constraint": "Old constraint Y",
+                "suggested_options": ["Old Option 1"],
+                "status": "ANSWERED",
+                "answer": "Approved old answer",
+                "answered_at": "2026-10-13T09:00:00Z",
+            }
+        ]
+
+        res = self.manager.generate_clarifications(
+            requirement_context=self.req_context,
+            reasoning_result=reasoning,
+            existing_clarifications=existing,
+        )
+
+        self.assertEqual(res.total_questions, 2)
+        self.assertEqual(res.open_questions, 1)
+        new_q = next(q for q in res.questions if q.related_constraint == "New parameter X")
+        old_q = next(q for q in res.questions if q.related_constraint == "Old constraint Y")
+        self.assertEqual(new_q.status, "OPEN")
+        self.assertEqual(new_q.question_id, "CLARIFY-SRS178-02")
+        self.assertEqual(old_q.status, "ANSWERED")
+        self.assertEqual(old_q.question_id, "CLARIFY-SRS178-01")
+        self.assertEqual(old_q.answer, "Approved old answer")
+
+    def test_state_transition_from_needs_clarification_to_pass(self):
+        from app.pipeline import PipelineResult
+        from app.ui.app import classify_result
+
+        open_res = PipelineResult(
+            requirement_id=8,
+            global_number=8,
+            srs_id="[SRS178]",
+            section_number="3.2.1",
+            section_title="Safety Subsystem",
+            raw_text="The system shall disable all outputs within 10ms if loss of communication occurs.",
+            status="PASS",
+            validation_valid=True,
+            clarifications=[
+                {"question_id": "CLARIFY-1", "status": "OPEN", "answer": None}
+            ],
+        )
+        self.assertEqual(classify_result(open_res)["label"], "PASS (NEEDS CLARIFICATION)")
+
+        answered_res = PipelineResult(
+            requirement_id=8,
+            global_number=8,
+            srs_id="[SRS178]",
+            section_number="3.2.1",
+            section_title="Safety Subsystem",
+            raw_text="The system shall disable all outputs within 10ms if loss of communication occurs.",
+            status="PASS",
+            validation_valid=True,
+            clarifications=[
+                {"question_id": "CLARIFY-1", "status": "ANSWERED", "answer": "Approved Bound"}
+            ],
+        )
+        self.assertEqual(classify_result(answered_res)["label"], "PASS")
+
 
 if __name__ == "__main__":
     unittest.main()
+

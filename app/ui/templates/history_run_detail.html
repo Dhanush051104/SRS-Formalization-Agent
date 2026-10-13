@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Run {{ run.run_id }} Details | SRS Formalization Agent{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Breadcrumb -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-success text-decoration-none">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('history_dashboard') }}" class="text-success text-decoration-none">Formalization History</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">{{ run.run_id }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Run Header Card -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-body p-4 bg-white d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <h4 class="card-title text-dark mb-0 font-weight-bold font-monospace">
+                        {{ run.run_id }}
+                    </h4>
+                    {% if run.run_type == 'batch' %}
+                        <span class="badge bg-primary"><i class="bi bi-layers-fill me-1"></i>BATCH RUN</span>
+                    {% else %}
+                        <span class="badge bg-info text-dark"><i class="bi bi-file-earmark me-1"></i>SINGLE RUN</span>
+                    {% endif %}
+                    {% if run.is_recovered %}
+                        <span class="badge bg-light text-secondary border">Recovered</span>
+                    {% endif %}
+                </div>
+                <p class="text-muted mb-0 small">
+                    Executed on <strong>{{ ((run.created_at or "") | string | replace("T", " "))[:19] }} UTC</strong> &bull;
+                    Max revisions limit: <strong>{{ run.max_revisions }}</strong> &bull;
+                    Processed <strong>{{ run['items'] | length }}</strong> requirement(s).
+                </p>
+                {% if run.model_config %}
+                <div class="mt-2 small text-muted">
+                    <span class="badge bg-light text-dark border me-1">Analyst: {{ run.model_config.analyst or 'default' }}</span>
+                    <span class="badge bg-light text-dark border me-1">Reasoning: {{ run.model_config.reasoning or 'default' }}</span>
+                    <span class="badge bg-light text-dark border">Critic: {{ run.model_config.critic or 'default' }}</span>
+                </div>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('history_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left me-1"></i>Back to History
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Outcome Bar -->
+    <div class="row g-3 mb-4">
+        {% for label, count in run.status_summary.items() %}
+            {% if count > 0 %}
+                {% if label == 'PASS' %}
+                    {% set css = 'success' %}
+                {% elif 'CLARIFICATION' in label %}
+                    {% set css = 'warning' %}
+                {% elif label == 'INVALID FORMULA' or label == 'BLOCKED' or label == 'FAILED' %}
+                    {% set css = 'danger' %}
+                {% else %}
+                    {% set css = 'secondary' %}
+                {% endif %}
+                <div class="col-6 col-md-3">
+                    <div class="card border-0 shadow-sm text-center p-3 bg-white">
+                        <div class="fs-3 text-{{ css }} fw-bold">{{ count }}</div>
+                        <div class="small text-muted">{{ label }}</div>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- Per-Requirement Result Accordion -->
+    <div class="accordion" id="runResultsAccordion">
+        {% for res in run['items'] %}
+            {% set idx = loop.index %}
+            {% set info = classify_result(res) %}
+
+            <div class="accordion-item mb-3 border-0 shadow-sm rounded overflow-hidden" id="item-{{ res.requirement_id }}">
+                <h2 class="accordion-header" id="heading-{{ idx }}">
+                    <button class="accordion-button {% if not loop.first %}collapsed{% endif %} py-3" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#collapse-{{ idx }}"
+                            aria-expanded="{{ 'true' if loop.first else 'false' }}"
+                            aria-controls="collapse-{{ idx }}">
+                        <div class="d-flex align-items-center gap-2 w-100 me-3 flex-wrap">
+                            <i class="bi {{ info.icon }} text-{{ info.css }} fs-5"></i>
+                            <span class="badge bg-secondary">ID {{ res.requirement_id }}</span>
+                            {% if res.srs_id %}<span class="badge bg-primary font-monospace">{{ res.srs_id }}</span>{% endif %}
+                            {% if res.global_number %}<span class="badge bg-success">R{{ res.global_number }}</span>{% endif %}
+                            <span class="text-muted small text-truncate" style="max-width: 480px;">
+                                "{{ res.raw_text[:110] }}{% if res.raw_text | length > 110 %}…{% endif %}"
+                            </span>
+                            <span class="ms-auto badge bg-{{ info.css }}">{{ info.label }}</span>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapse-{{ idx }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}"
+                     aria-labelledby="heading-{{ idx }}" data-bs-parent="#runResultsAccordion">
+                    <div class="accordion-body bg-white border-top p-4">
+
+                        <!-- Source Requirement Text -->
+                        <div class="mb-3">
+                            <h6 class="small text-uppercase text-muted fw-bold mb-1">Source Requirement Text</h6>
+                            <p class="font-monospace small bg-light p-3 rounded mb-0 text-dark border-start border-4 border-success">
+                                "{{ res.raw_text }}"
+                            </p>
+                        </div>
+
+                        <!-- Formalization Formula -->
+                        <div class="mb-3">
+                            <h6 class="small text-uppercase text-muted fw-bold mb-1">Mathematical Logic Representation</h6>
+                            <div class="p-3 bg-dark text-light rounded font-monospace small">
+                                {{ res.formalization or "No formula generated." }}
+                            </div>
+                        </div>
+
+                        <!-- Deterministic Validation Report -->
+                        <div class="mb-3">
+                            <h6 class="small text-uppercase text-muted fw-bold mb-1">Deterministic Validation</h6>
+                            {% if res.validation_valid is none %}
+                                <span class="badge bg-secondary">Validation not recorded</span>
+                            {% elif res.validation_valid %}
+                                <div class="alert alert-success py-2 small mb-0">
+                                    <i class="bi bi-check-circle me-1"></i>Structural and symbol validation passed.
+                                </div>
+                            {% else %}
+                                <div class="alert alert-danger py-2 small mb-2">
+                                    <i class="bi bi-exclamation-octagon me-1"></i>Structural or symbol validation FAILED.
+                                </div>
+                                {% if res.validation_findings %}
+                                    <ul class="small mb-0">
+                                        {% for vf in res.validation_findings %}
+                                            <li><span class="badge bg-danger me-1">{{ vf.rule or vf.category }}</span>{{ vf.description }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+
+                        <!-- Interpretation -->
+                        {% if res.interpretation %}
+                        <div class="mb-3">
+                            <h6 class="small text-uppercase text-muted fw-bold mb-1">Interpretation</h6>
+                            <p class="small text-dark mb-0">{{ res.interpretation }}</p>
+                        </div>
+                        {% endif %}
+
+                        <!-- Entities & Predicates Grid -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <div class="p-2 bg-light rounded border h-100">
+                                    <small class="fw-bold text-dark d-block mb-1">Entities</small>
+                                    {% if res.entities %}
+                                        <div class="small text-muted">{{ res.entities | join(', ') }}</div>
+                                    {% else %}
+                                        <span class="text-muted small">None recorded</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="p-2 bg-light rounded border h-100">
+                                    <small class="fw-bold text-dark d-block mb-1">Predicates</small>
+                                    {% if res.predicates %}
+                                        <div class="small font-monospace text-muted">{{ res.predicates | join(', ') }}</div>
+                                    {% else %}
+                                        <span class="text-muted small">None recorded</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Clarification Questions -->
+                        {% if res.clarifications %}
+                        <div class="mb-3">
+                            <h6 class="small text-uppercase text-muted fw-bold mb-2">
+                                Clarification Questions ({{ res.clarifications | length }})
+                            </h6>
+                            <div class="list-group">
+                                {% for cq in res.clarifications %}
+                                <div class="list-group-item p-2 small">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="font-monospace fw-bold">{{ cq.question_id }}</span>
+                                        <span class="badge {% if cq.status == 'ANSWERED' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+                                            {{ cq.status or 'OPEN' }}
+                                        </span>
+                                    </div>
+                                    <div class="text-dark">{{ cq.question_text }}</div>
+                                    {% if cq.status == 'ANSWERED' and cq.answer %}
+                                        <div class="mt-1 p-2 bg-light rounded text-success font-monospace">
+                                            <strong>Recorded Answer:</strong> {{ cq.answer }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Critic Summary & Iterations -->
+                        <div class="mb-3 p-3 bg-light rounded border">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="fw-bold small text-dark">Critic Verdict &amp; Iteration Count</span>
+                                <span class="badge bg-dark">Iterations: {{ res.iterations_conducted }} / {{ res.max_iterations }}</span>
+                            </div>
+                            <p class="small text-muted mb-0">{{ res.critic_summary or "No critic summary recorded." }}</p>
+                        </div>
+
+                        <!-- Full View Link -->
+                        <div class="text-end mt-3">
+                            <a href="{{ url_for('formalize_requirement', req_id=res.requirement_id) }}" class="btn btn-outline-success btn-sm">
+                                <i class="bi bi-box-arrow-up-right me-1"></i>Open Full View for {{ res.srs_id }}
+                            </a>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+</div>
+{% endblock %}

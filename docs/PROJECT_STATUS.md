@@ -1,85 +1,108 @@
 # Project Status: SRS Formalization Agent
 
-This document provides a high-level status report of the SRS Formalization Agent project. It is intended for project directors, onboarding developers, and other stakeholders who want to understand what has been completed, what is in progress, and the overall architectural direction.
+This document provides a comprehensive status report of the SRS Formalization Agent project, detailing implemented architecture, current test coverage, and operational capabilities.
 
 ---
 
-## 1. Project Objectives
-The **SRS Formalization Agent** is a research and prototyping system designed to ingest Software Requirements Specification (SRS) documents and translate their natural-language requirements into structured mathematical representations, predicates, and temporal logic (e.g., LTL). 
+## 1. Project Overview & Objectives
+The **SRS Formalization Agent** is an engineering AI platform designed to ingest natural-language Software Requirements Specification (SRS) documents and translate their requirements into rigorous mathematical logic representations (predicates, constraints, and LTL temporal formulas).
 
-This formalization enables automated verification, consistency checks, and safety analysis of critical software systems before implementation.
-
----
-
-## 2. Overall Architectural Concept
-The core design philosophy is: **deterministic document processing must remain separate from probabilistic model reasoning**. 
-
-The Python orchestration layer acts as the backbone, driving the workflow and managing the context database. The AI models—responsible for analyzing context and generating formal specifications—are treated as **swappable plugins**. This ensures the system can easily support different models (local or cloud-hosted) without redesigning the core ingestion, parsing, database, or UI layers.
+The system enables automated formal verification, consistency checking, and safety auditing of mission-critical systems prior to software implementation.
 
 ---
 
-## 3. What Has Been Completed
-
-### Milestone 1: Whole-SRS Lossless Ingestion & SQLite Canonical Store
-We built a parsing pipeline that extracts every text element from the source document (supporting PDF and DOCX) and preserves them in a local SQLite database (`srs_canonical.db`).
-- **Lossless Ingestion:** Explanatory text, section headings, requirements, and formatting elements are captured. The raw source remains structured so the document can be reconstructed in its original source order.
-- **Section Structuring:** The document structure is parsed sequentially, mapping sections and sub-sections (e.g., `3.2.1`) while filtering out lists and numbered requirement sentences to avoid fake sections.
-- **Traceability:** Requirements (identified by numbered statements containing `[SRSxxx]` tags) are parsed, keeping their original section, page number, raw text, and source element order.
-- **Interactive Section Browser:** An interactive Flask web UI allows users to view the parsed document section-by-section, check requirement counts, and read reconstructed source content.
-
-### Milestone 6: Bounded Automated Revision Loop
-We implemented the `RevisionManager` orchestrating bounded iterative feedback cycles between `ReasoningModel` and `CriticModel`.
-- **Bounded Automated Loop:** Orchestrates `ReasoningModel.reason()` $\rightarrow$ `CriticModel.critique()` $\rightarrow$ check status $\rightarrow$ retry with structured Critic feedback prompt if `NEEDS_REVISION` up to `max_iterations` (default 3).
-- **Termination Safeguards:** Immediately halts loop on `PASS` (status=`PASS`, `CRITIC_PASSED`) or `BLOCKED` (status=`BLOCKED`, `CRITIC_BLOCKED`). Sets status=`MAX_ITERATIONS` (`MAX_ITERATIONS_REACHED`) if limit is hit without forcing `PASS`.
-- **Full History Provenance:** Captures every intermediate `ReasoningResult`, `CriticResult`, and revision prompt in `RevisionHistoryEntry` inside `RevisionResult`.
-- **Forwarding Feedback:** `build_revision_user_prompt` serializes original `ContextPackage`, candidate formalization, and full Critic findings (severities, descriptions, source/reasoning evidence, recommendations, missing constraints, unsupported assumptions) into the revision prompt.
-
-### Milestone 7: Symbol Registry, Retrieval & Validation
-We implemented the canonical Symbol Registry infrastructure ([app/symbols/](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/app/symbols/)) and authoritative registry file ([data/symbol_registry.json](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/data/symbol_registry.json)).
-- **Authoritative Registry:** Canonical repository defining mathematical logic operators, temporal operators, propositional connectives, and requirement-scoped domain predicates/constants. Prevents models from silently redefining symbols.
-- **Scope Isolation:** Separates globally applicable symbols (`G`, `F`, `X`, `U`, `->`, `&&`, etc.) from requirement-scoped symbols (e.g. `loss_of_comm`, `outputs_disabled` scoped strictly to `[SRS178]`). Allows legitimate distinct definitions across different requirement scopes.
-- **Deterministic Validation:** Validates unique identifiers, detects duplicate spellings or alias collisions within identical scopes, and rejects malformed registry entries.
-- **Deterministic Retrieval:** `SymbolRetriever` provides queries for global symbols, requirement-relevant symbols, category searches, and spelling/alias lookups with explicit provenance.
-- **Consistency Validator:** `SymbolValidator` audits candidate formalizations against registry definitions, flagging out-of-scope symbol leaks, conflicting definitions, and unregistered domain identifiers.
-- **Additive Context Integration:** `ContextBuilder.build()` provides an additive `include_symbols=True` flag to inject symbols into `ContextPackage.symbols` without breaking existing callers or backward compatibility.
-
-### Evaluation Fixture: Multi-Domain Simple Requirements Corpus
-Integrated a dedicated 306-requirement multi-domain evaluation corpus ([tests/fixtures/simple_requirements.txt](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/fixtures/simple_requirements.txt)) and a lightweight structured loader ([tests/fixtures/simple_requirements_loader.py](file:///c:/Users/PC/Documents/GitHub/SRS-Formalization-Agent/tests/fixtures/simple_requirements_loader.py)).
-- **Corpus Coverage:** 306 natural-language requirements across 10 engineering domains (redundant computer / bus-master system, ventilator, UAV, washing machine, microwave oven, refrigerator, ADAS, fire safety controller, access control, elevator).
-- **Architecture Integrity:** Kept strictly separate from the production SRS knowledge base (`SRS-Knowledge/`) without modifying pattern or concept notes.
-- **Intended Purpose:** Serves as a standardized benchmark corpus for:
-  1. **Module-level testing:** Validating individual prompt schemas, parser stages, and model output mappings.
-  2. **Regression testing:** Preventing performance degradation across system updates.
-  3. **Final end-to-end evaluation:** Verifying end-to-end pipeline execution from requirement selection to final formalization.
-  4. **Pattern coverage evaluation:** Assessing how effectively identified patterns map across diverse system domains.
-  5. **Model-quality benchmarking:** Comparing formalization accuracy, precision, and hallucination rates across different LLM backends (Llama 3, DeepSeek, Claude, GPT-4).
+## 2. Core Architectural Principles
+1. **Deterministic Foundations Separate from Probabilistic Reasoning:**
+   - Ingestion, document hierarchy extraction, SQLite indexing, knowledge retrieval, symbol validation, and clarification tracking are 100% deterministic and traceable.
+   - LLM reasoning (Analyst, Reasoning, Critic) is modularized via abstract base classes and swappable local model plugins.
+2. **Authoritative Symbol Governance:**
+   - The canonical `SymbolRegistry` defines permitted mathematical, temporal, and requirement-scoped symbols. Models cannot silently redefine or invent conflicting symbols.
+3. **Defense-in-Depth Validation:**
+   - Structural syntax validation (`validate_formalization`) and deterministic symbol scoping (`SymbolValidator`) are executed within both the revision loop and the pipeline boundary. A candidate formula can never receive `PASS` if structural or symbol validation fails.
+4. **Traceable Stakeholder Clarifications:**
+   - Unresolved parameters, missing constraints, or unsupported assumptions generate structured clarification questions. Recorded stakeholder answers persist across server restarts and inform subsequent formalization passes.
+5. **No Production Mocks:**
+   - Production code executes real pipeline components without synthetic fast-paths. Test mocks are strictly confined to test support fixtures.
 
 ---
 
-## 4. Current Ingestion and Validation Results
-Based on testing against the **NASA X-38 Software Requirements Specification (SRS)** and the **Simple Requirements Corpus**:
-* **Parsed Raw Elements:** 5,379 elements ingested.
-* **Unique Requirements Detected:** 195 SRS requirements (NASA X-38) + 306 Multi-Domain Evaluation requirements.
-* **Real Sections Identified:** 107 sections (including Sections 1 and 2, which are represented in the tree even with 0 requirements).
-* **Section 3.2.1 System Initialization:** Confirmed to contain all 17 requirements (R1 to R17 / SRS194 to SRS015).
-* **Target Group Test Suite:** 13 unit tests verifying validations, selection order, and CRUD operations pass successfully.
-* **Evaluation Corpus Test Suite:** 7 deterministic unit tests verifying exact line preservation, 1-306 numbering, domain categorization, and duplicate separation pass cleanly.
-* **Symbol Registry Test Suite:** 16 deterministic unit tests verifying loading, global/scoped retrieval, alias resolution, scope isolation, validation rejection, and formalization auditing pass cleanly.
-* **Full Agent Test Suite:** 119 offline deterministic unit tests + live Ollama Llama 3 integration tests pass cleanly.
+## 3. Implemented Pipeline Workflow
+
+```
+Target Requirement (SQLite)
+          ↓
+Analyst Model (Identifies structural patterns)
+          ↓
+ContextBuilder (Retrieves Obsidian vault notes + Canonical symbols + Prior clarifications)
+          ↓
+Reasoning Model (Synthesizes LTL candidate formula, entities, predicates, constraints)
+          ↓
+Critic Model & Deterministic Validators (Assesses soundness, syntax, symbol scoping)
+          ↓
+RevisionManager (Bounded feedback loop revising candidate formulas)
+          ↓
+ClarificationManager (Synthesizes open/answered stakeholder questions)
+          ↓
+Result Store (Atomic persistent cache in data/result_cache.json)
+          ↓
+Flask UI (Full View dashboard & sequential batch processing)
+```
 
 ---
 
-## 5. What Is Being Worked On Next (Milestone 7)
-We are currently entering the **Clarification Manager & Interactive UI Loop** phase:
-1. **Clarification Manager:** Managing interactive clarification dialogues when the Critic or Reasoning Model flags unstated parameters or un-resolvable ambiguities under `unresolved_items` or `BLOCKED` status.
-2. **Flask Web UI Integration:** Exposing the complete end-to-end trace (Requirement $\rightarrow$ Analyst $\rightarrow$ Obsidian Knowledge $\rightarrow$ Reasoning Formalization $\rightarrow$ Critic Evaluation $\rightarrow$ Revision Iteration History) in the interactive web interface.
+## 4. Current Test Suite Status
+
+The project maintains extensive automated test coverage across all subsystems:
+
+- **Offline Deterministic Unit & Safety Tests:** **216 passed / 216 total (100% passing)** in ~35 seconds.
+  - Ingestion & Parser diagnostics (`test_parser.py`, `test_milestone1.py`)
+  - Section isolation & boundaries (`test_section_isolation.py`)
+  - Target groups & CRUD services (`test_target_groups.py`)
+  - Obsidian retriever & context builder (`test_obsidian_retriever.py`, `test_context_builder.py`)
+  - Multi-domain 306-requirement evaluation corpus (`test_simple_requirements.py`)
+  - Analyst, Reasoning, Critic model schemas (`test_analyst_model.py`, `test_reasoning_model.py`, `test_critic_model.py`)
+  - Bounded revision loop (`test_revision_manager.py`)
+  - Symbol registry & symbol validator (`test_symbol_registry.py`)
+  - Formalization safety & validator rules (`test_formalization_safety.py`)
+  - Clarification workflow & answer persistence (`test_clarification.py`)
+  - Model configuration settings (`test_model_settings.py`)
+  - Pipeline orchestrator, Full View routes, & batch processing (`test_pipeline.py`)
+- **Document Ingestion Verification:**
+  - Raw text elements ingested: **5,379**
+  - Canonical SRS requirements: **195** (NASA X-38 SRS)
+  - Canonical sections identified: **107**
+  - Section 3.2.1 requirements: **17** (R1–R17 / SRS194–SRS015)
+- **Live Integration Tests:** Controlled integration suites (`test_ollama_*_integration.py`) verify live inference with local Ollama service.
 
 ---
 
-## 6. Remote GPU & Swappable Hardware Strategy
-During development and deployment, we want to run large open-source formalization models (like DeepSeek-Coder, Llama-3, or specialized fine-tuned reasoning models). 
+## 5. Completed Capabilities
 
-Because local developer machines may have limited GPU hardware (RAM/VRAM), we are designing the orchestrator to support a **hybrid deployment strategy**:
-* **Remote Dev Environment:** The Python orchestrator runs locally, calling remote GPU instances (e.g., RunPod, Vast.ai) hosting model APIs during the developer phase.
-* **Local Production Environment:** Once deployed on target developer workstations with high-capacity hardware, the orchestrator connects to local models (e.g., Ollama or local Hugging Face pipelines) using the same model-plugin interfaces.
-
+1. **Document Ingestion & Browser:**
+   - Lossless PDF/DOCX parsing into canonical SQLite database (`srs_canonical.db`).
+   - Interactive Flask UI with collapsible section hierarchy tree and recommended starting section.
+2. **Target Group Management:**
+   - Selection of individual or multi-requirement target groups.
+   - Reordering, removal, and cancellation with database integrity checks.
+3. **Formalization Pipeline:**
+   - Single-requirement formalization (`/formalize/<id>`) with Full View tabbed trace:
+     - Mathematical Logic Representation (LTL)
+     - Deterministic Structural Validation Report
+     - Natural Language Interpretation
+     - Identified Entities, Predicates, and System Effects
+     - Analyst Identified Patterns & Rationale
+     - Retrieved Canonical Symbols & Obsidian Vault Knowledge
+     - Critic Assessment & Multi-Iteration Revision History Timeline
+     - Structured Stakeholder Clarifications Form
+4. **Batch Formalization:**
+   - Sequential processing (`/formalize/batch`) of multiple selected requirements.
+   - Deduplication of input IDs and independent fault isolation (a crash on one never stops others).
+   - Real-time status summary badges: `PASS`, `PASS (NEEDS CLARIFICATION)`, `INVALID FORMULA`, `BLOCKED`, `FAILED`.
+5. **Interactive Clarification Workflow:**
+   - Open questions display selectable suggested options plus custom resolution text input.
+   - Stakeholder answers persist with timestamps and update status badges immediately.
+   - Option to re-run formalization incorporating resolved answers into the reasoning context.
+6. **Local Model Management:**
+   - Dynamic model detection from local Ollama tags API (`/api/tags`).
+   - Role-based configuration for Analyst, Reasoning, and Critic models (`/settings/models`).
+   - Safe fallbacks when local Ollama service is unavailable or models are uninstalled.

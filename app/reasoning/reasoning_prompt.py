@@ -110,6 +110,22 @@ def build_reasoning_user_prompt(context_package: ContextPackage) -> str:
 
     knowledge_str = "\n".join(retrieved_knowledge_blocks) if retrieved_knowledge_blocks else "No Obsidian notes loaded."
 
+    # Format Answered Clarifications if present
+    answered_clarifs = [
+        c for c in getattr(context_package, "clarifications", [])
+        if c.get("status") == "ANSWERED" and c.get("answer")
+    ]
+    if answered_clarifs:
+        clarifs_lines = []
+        for c in answered_clarifs:
+            q_id = c.get("question_id", "CLARIF")
+            q_text = c.get("question_text", "")
+            ans = c.get("answer", "")
+            clarifs_lines.append(f"  - [{q_id}] {q_text}\n    Approved Answer: {ans}")
+        clarifs_str = "\n".join(clarifs_lines)
+    else:
+        clarifs_str = "No prior stakeholder clarifications."
+
     return f"""Please analyze and formalize the following SRS requirement using the provided ContextPackage data.
 
 ==========================================================
@@ -138,12 +154,18 @@ def build_reasoning_user_prompt(context_package: ContextPackage) -> str:
 {knowledge_str}
 
 ==========================================================
+4. STAKEHOLDER CLARIFICATION RESOLUTIONS
+==========================================================
+{clarifs_str}
+
+==========================================================
 INSTRUCTIONS
 ==========================================================
 1. Analyze the requirement logic using the raw text and retrieved Obsidian knowledge.
 2. Identify entities, predicates, conditions, actions, temporal constraints, mathematical constraints, and dependencies.
 3. Formulate a candidate formal mathematical logic statement (e.g. LTL, predicate logic equation, metric constraint) under "formalization".
 4. Explicitly list any assumptions under "assumptions" and unstated/missing parameters under "unresolved_items".
-5. Ensure requirement_id is {req.requirement_id}, global_number is {req.global_number}, and srs_id is "{req.srs_id}".
-6. Output a single valid JSON object matching the requested schema.
+5. Incorporate all approved stakeholder clarification resolutions into the formalization.
+6. Ensure requirement_id is {req.requirement_id}, global_number is {req.global_number}, and srs_id is "{req.srs_id}".
+7. Output a single valid JSON object matching the requested schema.
 """

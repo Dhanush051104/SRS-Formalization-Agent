@@ -23,6 +23,7 @@ class ContextPackage:
     obsidian_knowledge: RetrievalResult
     provenance: Dict[str, Any]
     symbols: List[Any] = field(default_factory=list)
+    clarifications: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class ContextBuilder:
@@ -56,6 +57,7 @@ class ContextBuilder:
         requirement_ids: List[int],
         pattern_names: List[str],
         include_symbols: bool = False,
+        clarifications: Optional[List[Dict[str, Any]]] = None,
     ) -> ContextPackage:
         """
         Builds a ContextPackage given requirement IDs and exact Analyst pattern names.
@@ -123,4 +125,5 @@ class ContextBuilder:
             obsidian_knowledge=obsidian_result,
             provenance=provenance,
             symbols=symbols_list,
+            clarifications=clarifications or [],
         )

@@ -1,4 +1,5 @@
-from typing import List, Optional
+from dataclasses import replace
+from typing import Any, List, Optional
 
 from app.critic.critic_model import CriticModel
 from app.critic.schemas import CriticResult
@@ -11,6 +12,8 @@ from app.revision.schemas import (
     RevisionResult,
     RevisionValidationError,
 )
+from app.formalization_validator import validate_formalization
+from app.critic.schemas import CriticFinding
 
 
 class RevisionManager:
@@ -25,6 +28,7 @@ class RevisionManager:
         reasoning_model: ReasoningModel,
         critic_model: CriticModel,
         max_iterations: int = 3,
+        symbol_validator: Optional[Any] = None,
     ) -> None:
         """
         Initialize the RevisionManager.
@@ -33,6 +37,7 @@ class RevisionManager:
             reasoning_model: Instantiated ReasoningModel adapter.
             critic_model: Instantiated CriticModel adapter.
             max_iterations: Maximum allowed revision iterations (must be >= 1).
+            symbol_validator: Optional SymbolValidator instance for canonical symbol checks.
 
         Raises:
             RevisionValidationError: If max_iterations < 1.
@@ -43,6 +48,7 @@ class RevisionManager:
         self.reasoning_model = reasoning_model
         self.critic_model = critic_model
         self.max_iterations = max_iterations
+        self.symbol_validator = symbol_validator
 
     def run_revision_loop(self, context_package: ContextPackage) -> RevisionResult:
         """
@@ -82,6 +88,56 @@ class RevisionManager:
                 context_package,
                 reasoning_res,
             )
+            structural_report = validate_formalization(reasoning_res.formalization)
+            validation_findings: List[CriticFinding] = []
+            if not structural_report.is_valid:
+                validation_findings.extend([
+                    CriticFinding(
+                        category=item["category"], severity=item["severity"],
+                        description=item["description"], recommendation=item["recommendation"],
+                    ) for item in structural_report.findings
+                ])
+
+            # Deterministic symbol validation
+            symbol_report = None
+            if self.symbol_validator is not None:
+                scope = (
+                    context_package.requirements[0].srs_id
+                    if context_package.requirements
+                    else None
+                )
+                symbol_report = self.symbol_validator.validate_candidate(
+                    formalization=reasoning_res.formalization,
+                    predicates=reasoning_res.predicates,
+                    entities=reasoning_res.identified_entities,
+                    current_scope=scope,
+                )
+                if not symbol_report.is_valid:
+                    for v in symbol_report.violations:
+                        if v.severity == "ERROR":
+                            validation_findings.append(CriticFinding(
+                                category="SYMBOL_VALIDATION",
+                                severity="ERROR",
+                                description=v.description,
+                                recommendation=f"Ensure symbol '{v.symbol_spelling}' complies with canonical registry definitions and permitted scope.",
+                            ))
+
+            if validation_findings:
+                # Deterministic validation failures can never be overridden by critic PASS.
+                # A critic BLOCKED is kept as BLOCKED. The critic's own result object is copied, not mutated.
+                fail_msgs = []
+                if not structural_report.is_valid:
+                    fail_msgs.append("Deterministic structural validation failed; the formula must be revised.")
+                if symbol_report is not None and not symbol_report.is_valid:
+                    fail_msgs.append("Deterministic symbol validation failed; the formula must be revised.")
+                critic_res = replace(
+                    critic_res,
+                    findings=list(critic_res.findings) + validation_findings,
+                    status="BLOCKED" if critic_res.status.upper() == "BLOCKED" else "NEEDS_REVISION",
+                    revision_required=True,
+                    summary=(critic_res.summary + " " if critic_res.summary else "") +
+                    " ".join(fail_msgs),
+                )
             final_critic_result = critic_res
 
             # 3. Record history entry

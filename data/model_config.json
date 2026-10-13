@@ -1,0 +1,5 @@
+{
+  "analyst": "llama3:latest",
+  "reasoning": "llama3:latest",
+  "critic": "llama3:latest"
+}

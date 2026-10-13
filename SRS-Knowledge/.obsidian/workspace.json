@@ -11,14 +11,10 @@
             "id": "e883a30a41c41ae3",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "Index/Pattern-Index.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "Pattern-Index"
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
             }
           }
         ]
@@ -191,6 +187,7 @@
   },
   "active": "e883a30a41c41ae3",
   "lastOpenFiles": [
+    "Index/Pattern-Index.md",
     "Requirements/req-srs010.md",
     "Requirements/req-srs008.md",
     "Requirements/req-srs195.md",
@@ -204,7 +201,6 @@
     "Patterns/pat-completion-barrier.md",
     "Concepts/concept-50hz-timer-interrupt.md",
     "Formalization/form-timed-ltl-rules.md",
-    "Index/Pattern-Index.md",
     "Patterns/pat-sequential-dependency.md",
     "Requirements/req-srs017.md",
     "Patterns/pat-initialization.md",

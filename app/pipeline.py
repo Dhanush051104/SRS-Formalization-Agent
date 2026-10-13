@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from app.analyst.analyst_model import AnalystModel
 from app.clarification.clarification_manager import ClarificationManager
 from app.critic.critic_model import CriticModel
+from app.formalization_validator import validate_formalization
 from app.reasoning.reasoning_model import ReasoningModel
 from app.retrieval.context_builder import ContextBuilder, ContextPackage
 from app.retrieval.obsidian_retriever import ObsidianRetriever
@@ -12,6 +13,7 @@ from app.retrieval.sqlite_retriever import RequirementContext, SQLiteRetriever
 from app.revision.revision_manager import RevisionManager
 from app.revision.schemas import RevisionResult
 from app.symbols.symbol_retriever import SymbolRetriever
+from app.symbols.symbol_validator import SymbolValidator
 
 
 @dataclass
@@ -37,6 +39,7 @@ class PipelineResult:
     # Knowledge & Symbol Retrieval
     retrieved_patterns: List[str] = field(default_factory=list)
     retrieved_files: List[str] = field(default_factory=list)
+    retrieved_notes: List[Dict[str, str]] = field(default_factory=list)
     symbols: List[Dict[str, Any]] = field(default_factory=list)
     provenance: Dict[str, Any] = field(default_factory=dict)
 
@@ -51,8 +54,12 @@ class PipelineResult:
     mathematical_constraints: List[str] = field(default_factory=list)
 
     # Verification, Critic & Revision
-    status: str = "PENDING"  # "PASS", "BLOCKED", "MAX_ITERATIONS", "FAILED"
+    status: str = "PENDING"  # "PASS", "BLOCKED", "MAX_ITERATIONS", "NEEDS_REVISION", "FAILED"
     termination_reason: str = ""
+    # Deterministic structural validation of the final formula (None = not run, e.g. pipeline failed earlier).
+    # Structural only; it does not establish semantic correctness.
+    validation_valid: Optional[bool] = None
+    validation_findings: List[Dict[str, Any]] = field(default_factory=list)
     critic_summary: str = ""
     critic_findings: List[Dict[str, Any]] = field(default_factory=list)
     iterations_conducted: int = 0
@@ -101,6 +108,7 @@ class FormalizationPipeline:
         critic_model: Optional[CriticModel] = None,
         revision_manager: Optional[RevisionManager] = None,
         clarification_manager: Optional[ClarificationManager] = None,
+        symbol_validator: Optional[SymbolValidator] = None,
     ) -> None:
         self.sqlite_retriever = sqlite_retriever
         self.analyst_model = analyst_model
@@ -111,6 +119,7 @@ class FormalizationPipeline:
         self.critic_model = critic_model
         self.revision_manager = revision_manager
         self.clarification_manager = clarification_manager or ClarificationManager()
+        self.symbol_validator = symbol_validator
 
     def _ensure_components(self, max_iterations: int = 2) -> None:
         """Lazily initialize default components if not injected."""
@@ -126,6 +135,9 @@ class FormalizationPipeline:
 
         if self.symbol_retriever is None:
             self.symbol_retriever = SymbolRetriever()
+
+        if self.symbol_validator is None and self.symbol_retriever is not None:
+            self.symbol_validator = SymbolValidator(self.symbol_retriever.registry)
 
         if self.context_builder is None:
             self.context_builder = ContextBuilder(
@@ -147,15 +159,24 @@ class FormalizationPipeline:
                 reasoning_model=self.reasoning_model,
                 critic_model=self.critic_model,
                 max_iterations=max_iterations,
+                symbol_validator=self.symbol_validator,
             )
+        elif getattr(self.revision_manager, "symbol_validator", None) is None and self.symbol_validator is not None:
+            self.revision_manager.symbol_validator = self.symbol_validator
 
-    def run(self, requirement_id: int, max_revisions: int = 2) -> PipelineResult:
+    def run(
+        self,
+        requirement_id: int,
+        max_revisions: int = 2,
+        clarifications: Optional[List[Dict[str, Any]]] = None,
+    ) -> PipelineResult:
         """
         Executes the complete formalization pipeline for a target requirement.
 
         Args:
             requirement_id: Primary key ID of the requirement in SQLite.
             max_revisions: Maximum number of reasoning-critic revision passes.
+            clarifications: Optional previously recorded stakeholder clarification resolutions.
 
         Returns:
             Structured PipelineResult with full stage-by-stage traceability.
@@ -205,6 +226,7 @@ class FormalizationPipeline:
                 requirement_ids=[requirement_id],
                 pattern_names=identified_patterns,
                 include_symbols=True,
+                clarifications=clarifications or [],
             )
         except Exception as e:
             return PipelineResult(
@@ -223,9 +245,14 @@ class FormalizationPipeline:
 
         # Extract symbols and file provenance
         obsidian_files: List[str] = []
+        retrieved_notes: List[Dict[str, str]] = []
         if context_pkg.obsidian_knowledge and hasattr(context_pkg.obsidian_knowledge, "pattern_items"):
             for item in context_pkg.obsidian_knowledge.pattern_items:
-                obsidian_files.append(item.pattern_file_path)
+                for note, role in ([(item.pattern_note, "pattern")] +
+                                   [(n, "formalization") for n in item.formalization_notes] +
+                                   [(n, "concept") for n in item.concept_notes]):
+                    obsidian_files.append(note.file_path)
+                    retrieved_notes.append({"path": note.file_path, "role": role, "content": note.content})
 
         symbols_data = [
             s.to_dict() if hasattr(s, "to_dict") else dict(s)
@@ -247,6 +274,7 @@ class FormalizationPipeline:
                 identified_patterns=identified_patterns,
                 retrieved_patterns=identified_patterns,
                 retrieved_files=obsidian_files,
+                retrieved_notes=retrieved_notes,
                 symbols=symbols_data,
                 provenance=context_pkg.provenance or {},
                 status="FAILED",
@@ -259,10 +287,43 @@ class FormalizationPipeline:
         clarif_res = self.clarification_manager.generate_clarifications(
             requirement_context=req_context,
             revision_result=revision_res,
+            existing_clarifications=clarifications,
         )
 
         final_reasoning = revision_res.final_reasoning_result
         final_critic = revision_res.final_critic_result
+
+        validation = validate_formalization(final_reasoning.formalization if final_reasoning else "")
+        symbol_report = None
+        if self.symbol_validator and final_reasoning:
+            symbol_report = self.symbol_validator.validate_candidate(
+                formalization=final_reasoning.formalization,
+                predicates=final_reasoning.predicates,
+                entities=final_reasoning.identified_entities,
+                current_scope=req_context.srs_id,
+            )
+        symbol_is_valid = symbol_report.is_valid if symbol_report else True
+        is_overall_valid = validation.is_valid and symbol_is_valid
+
+        combined_findings = list(validation.findings)
+        if symbol_report:
+            for v in symbol_report.violations:
+                if v.severity == "ERROR":
+                    combined_findings.append({
+                        "category": "SYMBOL_VALIDATION",
+                        "severity": v.severity,
+                        "rule": v.rule,
+                        "description": v.description,
+                        "recommendation": f"Ensure symbol '{v.symbol_spelling}' complies with canonical registry definitions and permitted scope.",
+                    })
+
+        final_status = revision_res.status
+        final_termination = revision_res.termination_reason
+        if final_status == "PASS" and not is_overall_valid:
+            # Defence in depth: RevisionManager already prevents this, but PASS must never coexist
+            # with a deterministic validation failure.
+            final_status = "NEEDS_REVISION"
+            final_termination = "VALIDATION_FAILED"
 
         return PipelineResult(
             requirement_id=req_context.requirement_id,
@@ -276,6 +337,7 @@ class FormalizationPipeline:
             analyst_confidence=analyst_confidence,
             retrieved_patterns=identified_patterns,
             retrieved_files=obsidian_files,
+            retrieved_notes=retrieved_notes,
             symbols=symbols_data,
             provenance=context_pkg.provenance or {},
             formalization=final_reasoning.formalization if final_reasoning else "",
@@ -286,8 +348,10 @@ class FormalizationPipeline:
             actions=final_reasoning.actions if final_reasoning else [],
             temporal_constraints=final_reasoning.temporal_constraints if final_reasoning else [],
             mathematical_constraints=final_reasoning.mathematical_constraints if final_reasoning else [],
-            status=revision_res.status,
-            termination_reason=revision_res.termination_reason,
+            status=final_status,
+            termination_reason=final_termination,
+            validation_valid=is_overall_valid,
+            validation_findings=combined_findings,
             critic_summary=final_critic.summary if final_critic else "",
             critic_findings=[f.to_dict() for f in final_critic.findings] if final_critic else [],
             iterations_conducted=revision_res.iterations_conducted,
@@ -314,6 +378,7 @@ def run_formalization_pipeline(
     critic_model: Optional[CriticModel] = None,
     revision_manager: Optional[RevisionManager] = None,
     clarification_manager: Optional[ClarificationManager] = None,
+    clarifications: Optional[List[Dict[str, Any]]] = None,
 ) -> PipelineResult:
     """
     Convenience function to run the formalization pipeline for a requirement ID.
@@ -329,4 +394,8 @@ def run_formalization_pipeline(
         revision_manager=revision_manager,
         clarification_manager=clarification_manager,
     )
-    return pipeline.run(requirement_id=requirement_id, max_revisions=max_revisions)
+    return pipeline.run(
+        requirement_id=requirement_id,
+        max_revisions=max_revisions,
+        clarifications=clarifications,
+    )
