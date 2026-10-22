@@ -24,6 +24,7 @@ class ContextPackage:
     provenance: Dict[str, Any]
     symbols: List[Any] = field(default_factory=list)
     clarifications: List[Dict[str, Any]] = field(default_factory=list)
+    set_context: Optional[Dict[str, Any]] = None
 
 
 class ContextBuilder:
@@ -58,6 +59,7 @@ class ContextBuilder:
         pattern_names: List[str],
         include_symbols: bool = False,
         clarifications: Optional[List[Dict[str, Any]]] = None,
+        set_context: Optional[Dict[str, Any]] = None,
     ) -> ContextPackage:
         """
         Builds a ContextPackage given requirement IDs and exact Analyst pattern names.
@@ -126,4 +128,5 @@ class ContextBuilder:
             provenance=provenance,
             symbols=symbols_list,
             clarifications=clarifications or [],
+            set_context=set_context,
         )

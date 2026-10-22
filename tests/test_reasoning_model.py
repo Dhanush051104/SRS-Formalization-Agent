@@ -195,6 +195,117 @@ class TestReasoningModelUnit(unittest.TestCase):
             reasoner.reason(self.context_package)
         self.assertIn("Failed to parse model output as JSON", str(ctx.exception))
 
+    def test_ollama_reasoning_recovers_missing_requirement_id_from_trusted_context(self):
+        """
+        Exact regression test: If the LLM omits 'requirement_id' from its JSON output,
+        OllamaReasoning recovers the trusted requirement_id from ContextPackage rather than
+        failing with 'Failed to map JSON data into ReasoningResult: 'requirement_id''.
+        """
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        # Model output completely lacks requirement_id, global_number, and srs_id
+        mock_response.message.content = json.dumps({
+            "interpretation": "Scheduler installs tasks during initialization.",
+            "identified_entities": ["Scheduler", "Task"],
+            "predicates": ["install_task(t)"],
+            "conditions": ["init_phase"],
+            "actions": ["install_task"],
+            "temporal_constraints": [],
+            "mathematical_constraints": [],
+            "dependencies": [],
+            "formalization": "G(init_phase -> install_task)",
+            "assumptions": [],
+            "unresolved_items": [],
+            "intermediate_representation": {
+                "propositions": [
+                    {"symbol": "P_init", "definition": "init_phase", "notation": "P_init := init_phase"}
+                ],
+                "temporal_operators": ["G"],
+            },
+        })
+        mock_client.chat.return_value = mock_response
+
+        reasoner = OllamaReasoning(model="llama3:latest", client=mock_client)
+        result = reasoner.reason(self.context_package)
+
+        self.assertEqual(result.requirement_id, 8)
+        self.assertEqual(result.global_number, 8)
+        self.assertEqual(result.srs_id, "[SRS178]")
+        self.assertEqual(result.formalization, "G(init_phase -> install_task)")
+        self.assertEqual(result.assumptions, [])
+
+    def test_ollama_reasoning_recovers_alias_and_swapped_id(self):
+        """Test recovery when LLM uses alias 'id' or mistakenly puts SRS ID in requirement_id."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.message.content = json.dumps({
+            "requirement_id": "[SRS178]",  # Swapped SRS ID string into requirement_id
+            "global_num": 8,               # Alias key for global_number
+            "srs_id": "[SRS178]",
+            "interpretation": "Interpretation text.",
+            "identified_entities": ["System"],
+            "predicates": ["p(x)"],
+            "conditions": [],
+            "actions": [],
+            "temporal_constraints": [],
+            "mathematical_constraints": [],
+            "dependencies": ["SRS177"],
+            "formalization": "G(p)",
+            "assumptions": [],
+            "unresolved_items": [],
+        })
+        mock_client.chat.return_value = mock_response
+
+        reasoner = OllamaReasoning(model="llama3:latest", client=mock_client)
+        result = reasoner.reason(self.context_package)
+
+        self.assertEqual(result.requirement_id, 8)
+        self.assertEqual(result.global_number, 8)
+        self.assertEqual(result.srs_id, "[SRS178]")
+        self.assertEqual(result.dependencies, ["SRS177"])
+
+    def test_ollama_reasoning_detects_explicit_requirement_id_mismatch(self):
+        """Test that explicit conflicting requirement_id from the model is rejected."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.message.content = json.dumps({
+            "requirement_id": 999,  # Explicit mismatch against expected ID 8
+            "global_number": 8,
+            "srs_id": "[SRS178]",
+            "interpretation": "Mismatch test.",
+            "identified_entities": [],
+            "predicates": [],
+            "conditions": [],
+            "actions": [],
+            "temporal_constraints": [],
+            "mathematical_constraints": [],
+            "dependencies": [],
+            "formalization": "True",
+            "assumptions": [],
+            "unresolved_items": [],
+        })
+        mock_client.chat.return_value = mock_response
+
+        reasoner = OllamaReasoning(model="llama3:latest", client=mock_client)
+        with self.assertRaises(ReasoningValidationError) as ctx:
+            reasoner.reason(self.context_package)
+        self.assertIn("requirement_id mismatch", str(ctx.exception))
+        self.assertIn("expected 8, got 999", str(ctx.exception))
+
+    def test_reasoning_result_from_dict_missing_fields_raise_informative_error(self):
+        """Test that ReasoningResult.from_dict raises informative ReasoningValidationError instead of KeyError."""
+        with self.assertRaises(ReasoningValidationError) as ctx:
+            ReasoningResult.from_dict({"global_number": 8, "srs_id": "[SRS178]"})
+        self.assertIn("missing required field 'requirement_id'", str(ctx.exception))
+
+        with self.assertRaises(ReasoningValidationError) as ctx2:
+            ReasoningResult.from_dict({"requirement_id": 8, "srs_id": "[SRS178]"})
+        self.assertIn("missing required field 'global_number'", str(ctx2.exception))
+
+        with self.assertRaises(ReasoningValidationError) as ctx3:
+            ReasoningResult.from_dict({"requirement_id": 8, "global_number": 8})
+        self.assertIn("missing required field 'srs_id'", str(ctx3.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

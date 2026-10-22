@@ -3,6 +3,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 from app.analyst.analyst_model import AnalystModel
+from app.analyst.set_analyst import SetAnalysisResult, SetAnalyst
 from app.clarification.clarification_manager import ClarificationManager
 from app.critic.critic_model import CriticModel
 from app.formalization_validator import validate_formalization
@@ -52,6 +53,7 @@ class PipelineResult:
     actions: List[str] = field(default_factory=list)
     temporal_constraints: List[str] = field(default_factory=list)
     mathematical_constraints: List[str] = field(default_factory=list)
+    dependencies: List[str] = field(default_factory=list)
 
     # Verification, Critic & Revision
     status: str = "PENDING"  # "PASS", "BLOCKED", "MAX_ITERATIONS", "NEEDS_REVISION", "FAILED"
@@ -70,6 +72,11 @@ class PipelineResult:
     assumptions: List[str] = field(default_factory=list)
     unresolved_items: List[str] = field(default_factory=list)
     clarifications: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Provenance, Intermediate Representation & Set Context
+    constraint_provenance: List[Dict[str, Any]] = field(default_factory=list)
+    intermediate_representation: Optional[Dict[str, Any]] = None
+    set_context: Optional[Dict[str, Any]] = None
 
     # Execution status & error tracking
     success: bool = True
@@ -109,6 +116,7 @@ class FormalizationPipeline:
         revision_manager: Optional[RevisionManager] = None,
         clarification_manager: Optional[ClarificationManager] = None,
         symbol_validator: Optional[SymbolValidator] = None,
+        set_analyst: Optional[SetAnalyst] = None,
     ) -> None:
         self.sqlite_retriever = sqlite_retriever
         self.analyst_model = analyst_model
@@ -120,6 +128,7 @@ class FormalizationPipeline:
         self.revision_manager = revision_manager
         self.clarification_manager = clarification_manager or ClarificationManager()
         self.symbol_validator = symbol_validator
+        self.set_analyst = set_analyst
 
     def _ensure_components(self, max_iterations: int = 2) -> None:
         """Lazily initialize default components if not injected."""
@@ -129,6 +138,9 @@ class FormalizationPipeline:
         if self.analyst_model is None:
             from app.analyst.ollama_analyst import OllamaAnalyst
             self.analyst_model = OllamaAnalyst()
+
+        if self.set_analyst is None:
+            self.set_analyst = SetAnalyst()
 
         if self.obsidian_retriever is None:
             self.obsidian_retriever = ObsidianRetriever()
@@ -169,6 +181,7 @@ class FormalizationPipeline:
         requirement_id: int,
         max_revisions: int = 2,
         clarifications: Optional[List[Dict[str, Any]]] = None,
+        set_context: Optional[Dict[str, Any]] = None,
     ) -> PipelineResult:
         """
         Executes the complete formalization pipeline for a target requirement.
@@ -177,6 +190,7 @@ class FormalizationPipeline:
             requirement_id: Primary key ID of the requirement in SQLite.
             max_revisions: Maximum number of reasoning-critic revision passes.
             clarifications: Optional previously recorded stakeholder clarification resolutions.
+            set_context: Optional batch/set-level contextual enrichment dictionary.
 
         Returns:
             Structured PipelineResult with full stage-by-stage traceability.
@@ -194,6 +208,7 @@ class FormalizationPipeline:
                 section_number="",
                 section_title="",
                 raw_text="",
+                set_context=set_context,
                 status="FAILED",
                 success=False,
                 error_stage="SQLITE_RETRIEVAL",
@@ -214,6 +229,7 @@ class FormalizationPipeline:
                 section_number=req_context.section_number,
                 section_title=req_context.section_title or "",
                 raw_text=req_context.raw_text,
+                set_context=set_context,
                 status="FAILED",
                 success=False,
                 error_stage="ANALYST",
@@ -227,6 +243,7 @@ class FormalizationPipeline:
                 pattern_names=identified_patterns,
                 include_symbols=True,
                 clarifications=clarifications or [],
+                set_context=set_context,
             )
         except Exception as e:
             return PipelineResult(
@@ -237,6 +254,7 @@ class FormalizationPipeline:
                 section_title=req_context.section_title or "",
                 raw_text=req_context.raw_text,
                 identified_patterns=identified_patterns,
+                set_context=set_context,
                 status="FAILED",
                 success=False,
                 error_stage="CONTEXT_BUILDER",
@@ -277,6 +295,7 @@ class FormalizationPipeline:
                 retrieved_notes=retrieved_notes,
                 symbols=symbols_data,
                 provenance=context_pkg.provenance or {},
+                set_context=set_context,
                 status="FAILED",
                 success=False,
                 error_stage="REVISION_LOOP",
@@ -301,6 +320,9 @@ class FormalizationPipeline:
                 predicates=final_reasoning.predicates,
                 entities=final_reasoning.identified_entities,
                 current_scope=req_context.srs_id,
+                intermediate_representation=final_reasoning.intermediate_representation,
+                identified_patterns=identified_patterns,
+                source_text=req_context.raw_text,
             )
         symbol_is_valid = symbol_report.is_valid if symbol_report else True
         is_overall_valid = validation.is_valid and symbol_is_valid
@@ -325,6 +347,10 @@ class FormalizationPipeline:
             final_status = "NEEDS_REVISION"
             final_termination = "VALIDATION_FAILED"
 
+        # Register propositions, predicates, and entities from intermediate representation into SymbolRegistry
+        if (final_status.startswith("PASS")) and self.symbol_retriever and getattr(self.symbol_retriever, "registry", None) and final_reasoning:
+            self._register_intermediate_symbols(req_context, final_reasoning)
+
         return PipelineResult(
             requirement_id=req_context.requirement_id,
             global_number=req_context.global_number,
@@ -348,6 +374,7 @@ class FormalizationPipeline:
             actions=final_reasoning.actions if final_reasoning else [],
             temporal_constraints=final_reasoning.temporal_constraints if final_reasoning else [],
             mathematical_constraints=final_reasoning.mathematical_constraints if final_reasoning else [],
+            dependencies=final_reasoning.dependencies if final_reasoning else [],
             status=final_status,
             termination_reason=final_termination,
             validation_valid=is_overall_valid,
@@ -360,10 +387,216 @@ class FormalizationPipeline:
             assumptions=final_reasoning.assumptions if final_reasoning else [],
             unresolved_items=final_reasoning.unresolved_items if final_reasoning else [],
             clarifications=[q.to_dict() for q in clarif_res.questions],
+            constraint_provenance=getattr(final_reasoning, "constraint_provenance", []) if final_reasoning else [],
+            intermediate_representation=getattr(final_reasoning, "intermediate_representation", None) if final_reasoning else None,
+            set_context=set_context,
             success=True,
             error_message=None,
             error_stage=None,
         )
+
+    def run_batch(
+        self,
+        requirement_ids: List[int],
+        max_revisions: int = 2,
+        clarifications_by_req: Optional[Dict[int, List[Dict[str, Any]]]] = None,
+    ) -> List[PipelineResult]:
+        """
+        Executes batch formalization for a set of requirements.
+        Performs set-level dependency analysis first to discover shared section contexts,
+        common entities, and cross-requirement dependencies, then executes formalization
+        for each requirement with enriched contextual awareness.
+        """
+        self._ensure_components(max_iterations=max_revisions)
+        clarifications_by_req = clarifications_by_req or {}
+
+        # 1. Retrieve all requirement contexts for set analysis
+        req_contexts: List[RequirementContext] = []
+        failed_results: Dict[int, PipelineResult] = {}
+
+        for rid in requirement_ids:
+            try:
+                ctx = self.sqlite_retriever.get_requirement_by_id(rid)
+                req_contexts.append(ctx)
+            except Exception as e:
+                failed_results[rid] = PipelineResult(
+                    requirement_id=rid,
+                    global_number=0,
+                    srs_id="",
+                    section_number="",
+                    section_title="",
+                    raw_text="",
+                    status="FAILED",
+                    success=False,
+                    error_stage="SQLITE_RETRIEVAL",
+                    error_message=f"Failed to retrieve requirement ID {rid} from SQLite: {e}",
+                )
+
+        # 2. Run Set-Level Analysis
+        set_analysis_res = None
+        if req_contexts and self.set_analyst:
+            try:
+                set_analysis_res = self.set_analyst.analyze_set(req_contexts)
+            except Exception:
+                set_analysis_res = None
+
+        # 3. Execute formalization sequentially for each requirement
+        results: List[PipelineResult] = []
+        for rid in requirement_ids:
+            if rid in failed_results:
+                results.append(failed_results[rid])
+                continue
+
+            req_set_ctx = None
+            if set_analysis_res and self.set_analyst:
+                req_set_ctx = self.set_analyst.get_requirement_context_for_set(rid, set_analysis_res)
+
+            req_clarifs = clarifications_by_req.get(rid)
+            res = self.run(
+                requirement_id=rid,
+                max_revisions=max_revisions,
+                clarifications=req_clarifs,
+                set_context=req_set_ctx,
+            )
+            results.append(res)
+
+        return results
+
+    def _register_intermediate_symbols(self, req_context: RequirementContext, reasoning: Any) -> None:
+        """
+        Safely registers propositions, predicates, and entities from IntermediateRepresentation
+        and reasoning output into the canonical SymbolRegistry without duplicating existing symbols
+        or overwriting user-approved definitions. Never modifies frozen SRS-Knowledge vault.
+        """
+        reg = getattr(self.symbol_retriever, "registry", None)
+        if not reg:
+            return
+
+        scope = req_context.srs_id
+
+        # 1. Extract intermediate representation (handle dataclass or dict)
+        ir = getattr(reasoning, "intermediate_representation", None)
+        if hasattr(ir, "to_dict"):
+            ir = ir.to_dict()
+
+        if isinstance(ir, dict):
+            # Propositions (explicit definitions: P := Definition)
+            for prop in ir.get("propositions", []):
+                p_sym = prop.get("symbol") if isinstance(prop, dict) else getattr(prop, "symbol", None)
+                if p_sym and str(p_sym).strip():
+                    clean_sym = str(p_sym).strip()
+                    p_def = prop.get("definition", "") if isinstance(prop, dict) else getattr(prop, "definition", "")
+                    p_notat = prop.get("notation", "") if isinstance(prop, dict) else getattr(prop, "notation", "")
+                    p_prov = prop.get("provenance", "EXPLICIT_SOURCE") if isinstance(prop, dict) else getattr(prop, "provenance", "EXPLICIT_SOURCE")
+                    p_appr = prop.get("user_approved", False) if isinstance(prop, dict) else getattr(prop, "user_approved", False)
+                    p_sig = str(p_notat or (f"{clean_sym} := {p_def}" if p_def else clean_sym)).strip()
+                    full_desc = str(p_def or clean_sym).strip()
+                    reg.register_domain_symbol(
+                        spelling=clean_sym,
+                        category="PROPOSITION",
+                        scope=scope,
+                        definition=full_desc,
+                        signature=p_sig,
+                        notes=p_sig,
+                        provenance={
+                            "source": "IntermediateRepresentation",
+                            "requirement_id": req_context.requirement_id,
+                            "srs_id": req_context.srs_id,
+                            "category": str(p_prov),
+                        },
+                        user_approved=bool(p_appr),
+                    )
+
+            # Predicates from IntermediateRepresentation
+            for p in ir.get("predicates", []):
+                p_name = p.get("name") if isinstance(p, dict) else getattr(p, "name", None)
+                if p_name and str(p_name).strip():
+                    clean_name = str(p_name).strip()
+                    p_desc = p.get("description", "") if isinstance(p, dict) else getattr(p, "description", "")
+                    p_ent = p.get("entity", "") if isinstance(p, dict) else getattr(p, "entity", "")
+                    p_cond = p.get("condition_type", "") if isinstance(p, dict) else getattr(p, "condition_type", "")
+                    p_sig = p.get("formal_expression") if isinstance(p, dict) else getattr(p, "formal_expression", None)
+                    p_notat = p.get("notation", "") if isinstance(p, dict) else getattr(p, "notation", "")
+                    p_appr = p.get("user_approved", False) if isinstance(p, dict) else getattr(p, "user_approved", False)
+                    p_prov = p.get("provenance", "EXPLICIT_SOURCE") if isinstance(p, dict) else getattr(p, "provenance", "EXPLICIT_SOURCE")
+                    full_desc = (p_desc.strip() or f"{p_cond} predicate for {p_ent}".strip() or f"Domain predicate {clean_name}")
+                    reg.register_domain_symbol(
+                        spelling=clean_name,
+                        category="PREDICATE",
+                        scope=scope,
+                        definition=full_desc,
+                        signature=p_sig or p_notat,
+                        notes=p_notat or None,
+                        provenance={
+                            "source": "IntermediateRepresentation",
+                            "requirement_id": req_context.requirement_id,
+                            "srs_id": req_context.srs_id,
+                            "category": str(p_prov),
+                        },
+                        user_approved=bool(p_appr),
+                    )
+
+                    if p_ent and str(p_ent).strip():
+                        reg.register_domain_symbol(
+                            spelling=str(p_ent).strip(),
+                            category="ENTITY",
+                            scope=scope,
+                            definition=f"System entity '{p_ent}' referenced in predicate for {scope}",
+                            provenance={
+                                "source": "IntermediateRepresentation",
+                                "requirement_id": req_context.requirement_id,
+                                "srs_id": req_context.srs_id,
+                            },
+                            user_approved=False,
+                        )
+
+            # Atomic clauses / legacy propositions fallback
+            for prop in ir.get("atomic_clauses", []):
+                if prop and str(prop).strip():
+                    raw_str = str(prop).strip()
+                    if ":=" in raw_str:
+                        sym, defn = raw_str.split(":=", 1)
+                        clean_sym = sym.strip()
+                        clean_def = defn.strip()
+                        p_sig = raw_str
+                    else:
+                        clean_sym = raw_str
+                        clean_def = f"Propositional clause '{raw_str}' identified for {scope}"
+                        p_sig = None
+                    reg.register_domain_symbol(
+                        spelling=clean_sym,
+                        category="PROPOSITION",
+                        scope=scope,
+                        definition=clean_def,
+                        signature=p_sig,
+                        notes=p_sig,
+                        provenance={
+                            "source": "IntermediateRepresentation",
+                            "requirement_id": req_context.requirement_id,
+                            "srs_id": req_context.srs_id,
+                        },
+                        user_approved=False,
+                    )
+
+            # Entities from IntermediateRepresentation
+            for ent in ir.get("entities", []):
+                ent_name = ent.get("name") if isinstance(ent, dict) else (ent if isinstance(ent, str) else getattr(ent, "name", None))
+                if ent_name and str(ent_name).strip():
+                    clean_ent = str(ent_name).strip()
+                    ent_desc = ent.get("description", "") if isinstance(ent, dict) else getattr(ent, "description", "")
+                    ent_cat = ent.get("category", "ENTITY") if isinstance(ent, dict) else getattr(ent, "category", "ENTITY")
+                    reg.register_domain_symbol(
+                        spelling=clean_ent,
+                        category=ent_cat or "ENTITY",
+                        scope=scope,
+                        definition=ent_desc.strip() or f"Entity '{clean_ent}' identified in intermediate representation for {scope}",
+                        provenance={
+                            "source": "IntermediateRepresentation",
+                            "requirement_id": req_context.requirement_id,
+                            "srs_id": req_context.srs_id,
+                        },
+                        user_approved=False,
+                    )
 
 
 def run_formalization_pipeline(
@@ -379,6 +612,8 @@ def run_formalization_pipeline(
     revision_manager: Optional[RevisionManager] = None,
     clarification_manager: Optional[ClarificationManager] = None,
     clarifications: Optional[List[Dict[str, Any]]] = None,
+    set_context: Optional[Dict[str, Any]] = None,
+    set_analyst: Optional[SetAnalyst] = None,
 ) -> PipelineResult:
     """
     Convenience function to run the formalization pipeline for a requirement ID.
@@ -393,9 +628,11 @@ def run_formalization_pipeline(
         critic_model=critic_model,
         revision_manager=revision_manager,
         clarification_manager=clarification_manager,
+        set_analyst=set_analyst,
     )
     return pipeline.run(
         requirement_id=requirement_id,
         max_revisions=max_revisions,
         clarifications=clarifications,
+        set_context=set_context,
     )

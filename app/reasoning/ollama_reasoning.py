@@ -112,6 +112,41 @@ class OllamaReasoning(ReasoningModel):
                 f"Parsed JSON must be a JSON object, got {type(parsed_data).__name__}."
             )
 
+        # Context-aware identity normalization:
+        # If the model response omitted requirement identity fields or returned unparseable values,
+        # recover from the trusted pipeline context (req) rather than crashing the revision loop.
+        # Explicit identity mismatches from the model will still be caught by validate_result.
+        req = context_package.requirements[0]
+
+        req_id_raw = parsed_data.get("requirement_id")
+        if req_id_raw is None:
+            alias_id = parsed_data.get("id") or parsed_data.get("req_id")
+            if alias_id is not None:
+                parsed_data["requirement_id"] = alias_id
+            else:
+                parsed_data["requirement_id"] = req.requirement_id
+        else:
+            try:
+                int(req_id_raw)
+            except (ValueError, TypeError):
+                # If model mistakenly passed string SRS ID into requirement_id, recover trusted int
+                if str(req_id_raw).strip("[]") == req.srs_id.strip("[]"):
+                    parsed_data["requirement_id"] = req.requirement_id
+
+        if parsed_data.get("global_number") is None:
+            alias_g = parsed_data.get("global_num") or parsed_data.get("number")
+            if alias_g is not None:
+                parsed_data["global_number"] = alias_g
+            else:
+                parsed_data["global_number"] = req.global_number
+
+        if not parsed_data.get("srs_id"):
+            alias_srs = parsed_data.get("srsId") or parsed_data.get("req_srs_id")
+            if alias_srs:
+                parsed_data["srs_id"] = str(alias_srs)
+            else:
+                parsed_data["srs_id"] = req.srs_id
+
         # 5. Construct ReasoningResult
         try:
             result = ReasoningResult.from_dict(parsed_data, raw_response=raw_content)

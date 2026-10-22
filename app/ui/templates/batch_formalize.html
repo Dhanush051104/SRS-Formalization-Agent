@@ -142,6 +142,43 @@
                         <p class="text-dark small mb-0">{{ res.interpretation }}</p>
                     </div>
                     {% endif %}
+                    {% if res.intermediate_representation %}
+                    {% set ir = res.intermediate_representation %}
+                    <div class="mb-3 border rounded p-2 bg-light">
+                        <h6 class="small text-uppercase text-muted fw-bold mb-1">
+                            <i class="bi bi-diagram-2 text-primary me-1"></i>Propositions & Formula Construction
+                        </h6>
+                        {% if ir.propositions %}
+                            <div class="small mb-1">
+                                <strong>Propositions:</strong>
+                                <ul class="mb-1 ps-3">
+                                    {% for prop in ir.propositions %}
+                                        <li><code class="text-primary">{{ prop.notation or (prop.symbol ~ ' := ' ~ prop.definition) }}</code></li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% elif ir.atomic_clauses %}
+                            <div class="small mb-1">
+                                <strong>Clauses:</strong>
+                                <ul class="mb-1 ps-3">
+                                    {% for ac in ir.atomic_clauses %}
+                                        <li><code>{{ ac }}</code></li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                        {% if ir.formula_construction %}
+                            <div class="small text-muted fst-italic">
+                                <strong>Construction:</strong> {{ ir.formula_construction }}
+                            </div>
+                        {% endif %}
+                        {% if ir.unresolved_parameters %}
+                            <div class="small text-warning fw-bold mt-1">
+                                <i class="bi bi-exclamation-triangle me-1"></i>Unresolved parameter(s): {{ ir.unresolved_parameters|join(', ') }} (clarification needed)
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                     {% endif %}
 
                     <!-- Deterministic validation -->

@@ -10,13 +10,13 @@
 The **Software Requirements Specification (SRS) Formalization Agent** is an engineering AI assistant developed at ADE. It automates the rigorous translation of natural-language defense software requirements (such as flight-critical avionics specifications) into verifiable mathematical representations (such as Linear Temporal Logic — LTL, state predicates, and timing bounds).
 
 The system works through an automated multi-stage pipeline:
-1. **Analyst Stage**: Scans the requirement text and matches it to engineering patterns (e.g., *Timeout / Deadline*, *Failure Handling*, *State Transition*).
-2. **Context Retrieval**: Deterministically fetches domain concepts, formal grammar templates, and canonical mathematical symbols from a local knowledge vault.
-3. **Reasoning Stage**: Uses a local Large Language Model (LLM) to generate candidate mathematical logic and natural-language interpretations.
-4. **Critic & Verification Stage**: An independent verification model audits the candidate formula against source constraints, timing bounds, and engineering assumptions.
-5. **Deterministic Structural & Symbol Validation**: Algorithmic Python checkers verify that logical operators are syntactically complete and that all symbols conform to the canonical symbol registry.
-6. **Revision Loop**: Automatically revises flawed candidate formulas up to a user-configured limit.
-7. **Clarification Manager**: Detects unstated engineering bounds and presents structured questions to human engineers.
+1. **Analyst & Set-Level Stage**: Scans single requirements or batches, matches individual patterns (e.g., *Timeout / Deadline*, *Failure Handling*), and conducts set-level dependency analysis across sections to identify shared entities, cross-references, and producer-consumer relationships.
+2. **Context Retrieval**: Deterministically fetches domain concepts, formal grammar templates, and canonical mathematical symbols from a local knowledge vault, and enriches prompts with set-level context.
+3. **Reasoning Stage**: Uses a local Large Language Model (LLM) to generate structured intermediate representations (atomic clauses, predicates), candidate mathematical logic, and constraint provenance classifications without hallucinating unstated bounds.
+4. **Critic & Verification Stage**: An independent verification model audits the candidate formula against source constraints, timing bounds, and engineering assumptions under strict "no invented numbers" rules.
+5. **Deterministic Structural & Symbol Validation**: Algorithmic Python checkers verify that logical operators are syntactically complete and that all symbols conform to the canonical symbol registry. Deterministic findings cannot be overridden by LLM assessments.
+6. **Revision Loop**: Automatically revises flawed candidate formulas up to a user-configured limit, preserving answered stakeholder clarifications as binding constraints.
+7. **Clarification Manager**: Detects unstated engineering bounds and presents structured questions to human engineers with one-click re-formalization.
 8. **Results & History Ledger**: Persists all formalization results and execution runs for auditability without requiring expensive re-computation.
 
 ### 1.2 Purpose of this Manual
@@ -26,24 +26,69 @@ It is specifically written so that any officer, scientist, or engineer—even wi
 
 ### 1.3 Verified Offline Status
 - **Core Backend & Inference**: **100% Offline-Capable**. The application runs completely locally using SQLite for data storage, local Markdown files for engineering knowledge, and an on-premise Ollama instance for local LLM inference. It requires **no internet access, no cloud APIs (no OpenAI, no Gemini, no Anthropic), and no external servers**.
-- **Browser User Interface (Styling Note)**: The web interface uses standard HTML templates. The current template links to Bootstrap CSS and icons via a content delivery network (CDN). In Section 3 and Section 7, this manual explains how to ensure the user interface displays properly offline.
+
+### 1.4 Reliability & Traceability Architecture
+The agent incorporates four core engineering safeguards designed specifically for safety-critical defense systems:
+1. **Constraint Provenance Grounding**: Every parameter, threshold, and timing bound is classified into five formal categories:
+   - `EXPLICIT_SOURCE`: Literal facts quoted directly from the requirement text.
+   - `SUPPORTED_DEPENDENCY`: Constraints derived from related requirements or section contexts.
+   - `APPROVED_DERIVATION`: Constants or rules established through answered stakeholder clarifications or approved domain notes.
+   - `UNRESOLVED`: Necessary technical bounds not stated in the source text (flagged for clarification).
+   - `UNSUPPORTED`: Hallucinated or unjustified parameters (strictly forbidden).
+2. **Prompt De-contamination**: Generic reasoning and critic prompts are completely scrubbed of hardcoded example numbers (such as arbitrary timeouts or resets), preventing cross-requirement parameter contamination.
+3. **Set-Level Batch Analysis**: When analyzing a group or section, the system clusters requirements, identifies shared entities and buses, detects cross-references (e.g. `[SRS178]`), and maps producer-consumer links before individual formalization.
+4. **Compositional Intermediate Representation**: Formulas are built compositionally from atomic propositions and predicate definitions rather than emitted as monolithic strings, allowing granular inspection in the web dashboard.
+- **Browser User Interface (100% Self-Hosted Assets)**: The web interface uses standard HTML templates with bundled, self-hosted Bootstrap 5.3.0 and Bootstrap Icons 1.10.0 stylesheets, scripts, and font files under `app/ui/static/vendor/`. Zero external CDN links or internet network requests are made by the browser. Full styling renders cleanly on fresh, air-gapped computers without needing pre-cached browser files.
 
 ---
 
 ## 2. What You Need
 
-### 2.1 Hardware Specifications
-Running Large Language Models locally requires reasonable computing capacity:
+### 2.1 Hardware Specifications & Inference Latency
 
-| Component | Minimum Specification | Recommended Specification (Optimal) |
-| :--- | :--- | :--- |
-| **Operating System** | Windows 10 (64-bit) or Windows 11 | Windows 10 / 11 (64-bit) |
-| **Processor (CPU)** | Intel Core i7 (8th Gen+) or AMD Ryzen 7 | Intel Core i7/i9 (12th Gen+) or AMD Ryzen 7/9 |
-| **System Memory (RAM)** | 16 GB DDR4/DDR5 | 32 GB or 64 GB DDR4/DDR5 |
-| **Graphics Card (GPU)** | Integrated CPU graphics (runs on CPU) | Dedicated NVIDIA GPU with $\ge$ 8 GB VRAM (RTX 3060, 4070, A4000+) |
-| **Available Disk Space** | 15 GB free space (SSD strongly recommended) | 30 GB free space on high-speed NVMe SSD |
+Running 8-Billion parameter Large Language Models locally is compute-intensive. Actual latency depends directly on the processor architecture, available physical RAM, and presence of a dedicated GPU.
 
-> **Note on Speed**: When running on CPU alone (without a dedicated NVIDIA GPU), each formalization step takes approximately 2 to 4 minutes per requirement because the CPU must process billions of mathematical calculations. With a dedicated NVIDIA GPU, inference completes in 5 to 15 seconds.
+#### Hardware Performance Tiers & Observed Latency
+
+| Hardware Tier | Processor (CPU) | System Memory (RAM) | Graphics (GPU) | Observed Latency per Requirement |
+| :--- | :--- | :--- | :--- | :--- |
+| **Observed Entry-Level Laptop** <br> *(Demonstration Baseline)* | Intel Core i3-7020U <br> (2.30 GHz, 2 cores / 4 threads) | 8 GB DDR4 | Integrated Intel HD 620 <br> *(Pure CPU inference)* | **20 – 30 minutes** <br> *(3 to 5 LLM calls per run)* |
+| **Standard Desktop / Workstation** <br> *(Recommended CPU)* | Intel Core i7 (8th Gen+) or <br> AMD Ryzen 7 (8+ cores) | 16 GB – 32 GB DDR4 | Integrated / Non-CUDA <br> *(Pure CPU inference)* | **5 – 10 minutes** <br> *(3 to 5 LLM calls per run)* |
+| **GPU Workstation** <br> *(Optimal Engineering Setup)* | Intel Core i7/i9 or <br> AMD Ryzen 7/9 | 32 GB – 64 GB DDR4/DDR5 | Dedicated NVIDIA GPU $\ge$ 8 GB VRAM <br> *(RTX 3060, 4070, A4000+ with CUDA)* | **5 – 15 seconds** <br> *(Full pipeline completion)* |
+
+> [!IMPORTANT]
+> **Why pure CPU inference takes 20–30 minutes on a dual-core laptop:**
+> A single formalization run does not make just one LLM call. The multi-stage verification architecture executes multiple sequential LLM chat completions:
+> 1. **Analyst Stage**: 1 LLM call to extract requirement scope, patterns, and timing constraints.
+> 2. **Reasoning Stage (Iteration 1)**: 1 LLM call to generate atomic propositions, predicate definitions, and candidate logic formula.
+> 3. **Critic Stage (Iteration 1)**: 1 LLM call for independent verification audit against source text.
+> 4. **Revision Stage (Iteration 2, if needed)**: 1 LLM call to revise the candidate formula addressing critic and validator findings.
+> 5. **Critic Stage (Iteration 2, if revised)**: 1 LLM call to re-audit the revised candidate.
+>
+> With the default setting of `max_revisions = 2`, an unverified candidate that requires revision makes **up to 5 full LLM chat completions** (1 Analyst + 2 calls per iteration $\times$ 2 iterations). If the candidate passes verification on the first attempt without revision, it makes **3 full LLM calls** (1 Analyst + 1 Reasoning + 1 Critic).
+>
+> On a dual-core processor such as the Intel Core i3-7020U (2 cores / 4 threads at 2.3 GHz), each 8B forward generation pass requires approximately 4 to 6 minutes of continuous CPU computation. Therefore, a complete 5-call run accumulates to **20 to 30 minutes total wall-clock time**.
+
+#### System Memory (RAM) Pressure on 8 GB Systems
+An 8-Billion parameter model (`llama3:latest`, 4-bit quantized) requires approximately 4.7 GB to 5.0 GB of RAM for model weights and KV context cache. On an 8 GB workstation:
+- Windows OS and core background processes consume ~2.5 GB to 3.0 GB of RAM.
+- Ollama model weights require ~4.8 GB of RAM.
+- Python runtime and web server consume ~200 MB to 400 MB.
+- **Total requirement**: ~7.5 GB to 8.2 GB of physical RAM.
+
+This places an 8 GB workstation right at the physical boundary. If external applications (such as web browsers with multiple tabs, IDEs, or office software) remain open, Windows is forced to page inactive memory to the disk swapfile (`pagefile.sys`), causing severe I/O thrashing and compounding inference latency.
+
+#### Conservative CPU Operating Guidelines
+To achieve reliable operation without unnecessary delay on entry-level or dual-core workstations:
+1. **Reduce Maximum Revisions to 1**:
+   In the web UI formalization view or configuration, set **Max Revisions** to `1` (or use default with understanding). This caps the run at a maximum of 3 LLM calls (1 Analyst + 1 Reasoning + 1 Critic, plus 1 revision pass only if needed), cutting total run time by approximately 40% to 50% (~12 to 15 minutes instead of 25 to 30 minutes).
+   - *Safety Trade-off*: The model is given only 1 revision attempt to satisfy the critic. If the candidate still has defects after 1 revision, the pipeline concludes safely with status `REVISION LIMIT REACHED`. **No validation or critic safeguards are bypassed**—deterministic structural and symbol validators still enforce strict safety, and all candidate formulas and findings are preserved for engineer review.
+2. **Close Unnecessary Applications**:
+   Close RAM-heavy applications (especially Google Chrome, Microsoft Edge tabs, and IDEs) before initiating live inference to guarantee dedicated physical RAM for Ollama.
+3. **Avoid Batch Runs on Dual-Core CPUs**:
+   Do not run section-level batch formalizations (e.g. 5+ requirements) on dual-core CPU machines during live demonstrations, as a batch will take 1.5 to 2.5 hours. Instead, demonstrate single-requirement execution or inspect previously computed runs in the **Formalization History** ledger (`/history`).
+4. **Use Pre-computed History for Reviews**:
+   The Formalization History ledger (`data/history_store.json`) persists full mathematical formulas, proposition definitions, and verification audits for previously analyzed requirements (such as SRS017, SRS178, SRS194, SRS234, SRS014). ADE engineers can inspect, audit, and evaluate these results instantaneously without triggering any model re-computation.
 
 ### 2.2 Software Requirements
 All required software can be downloaded once while connected to the internet and transferred via approved media to the offline workstation:
@@ -113,16 +158,12 @@ If the target workstation is already disconnected from the internet, you can cre
    ```
 3. This creates a folder named `wheelhouse/` containing the exact offline installation packages for `Flask`, `python-docx`, `pypdf`, `ollama`, and their sub-dependencies.
 
-### Step 5: Pre-Cache User Interface Styling (One-Time Browser Cache)
-Because the application interface uses standard Bootstrap styles via CDN:
-1. While internet is available, start the application once by running:
-   ```powershell
-   python run_ui.py
-   ```
-2. Open your browser to `http://127.0.0.1:5000/`.
-3. Browse to the **Dashboard**, **Formalization History**, and **Model settings** pages.
-4. Your browser will download and store the Bootstrap CSS, icons, and JavaScript files in its local cache.
-5. Stop the application in PowerShell by pressing `Ctrl + C`.
+### Step 5: Offline User Interface Assets (Pre-Bundled)
+The web user interface is 100% self-hosted and does **not** rely on external internet CDNs or browser pre-caching:
+- All required Bootstrap 5.3.0 CSS and JavaScript libraries are pre-packaged under `app/ui/static/vendor/bootstrap/`.
+- All required Bootstrap Icons 1.10.0 stylesheets and Web Open Font Format files (`.woff2`, `.woff`) are pre-packaged under `app/ui/static/vendor/bootstrap-icons/`.
+- All assets are distributed under the official open-source MIT License with license files included in the respective directories.
+- No network requests are made to `cdn.jsdelivr.net` or any external server when loading or navigating pages.
 
 ---
 
@@ -134,6 +175,14 @@ Create a standard ZIP archive of the `SRS-Formalization-Agent` folder. Ensure th
 ```text
 SRS-Formalization-Agent/
 ├── app/                        [Included - Full application source]
+│   ├── ui/
+│   │   ├── static/
+│   │   │   ├── css/            [Custom application styles]
+│   │   │   └── vendor/         [Bundled offline vendor assets]
+│   │   │       ├── bootstrap/          [Bootstrap 5.3.0 CSS, JS & LICENSE]
+│   │   │       └── bootstrap-icons/    [Bootstrap Icons 1.10.0 CSS, fonts & LICENSE]
+│   │   └── templates/          [HTML templates with local static references]
+│   └── ...
 ├── data/                       [Included - Registry, configs, PDF, caches]
 │   ├── history_store.json
 │   ├── model_config.json
@@ -247,31 +296,74 @@ When finished, click into the PowerShell window and press `Ctrl + C` once. The s
 2. Under **NASA X-38 Software Requirements Specification**, select **Browse Document** or click on a section (e.g., **3.2.1 System Initialization**).
 3. The page displays the requirements extracted from that section.
 4. Next to any requirement (e.g., `[SRS178]`), click **Run Formalization**.
-5. The application will execute the end-to-end pipeline:
-   - Identifies engineering patterns.
-   - Retrieves Obsidian vault knowledge and mathematical symbols.
-   - Synthesizes formal temporal logic.
-   - Audits formula syntax and symbol boundaries.
-   - Performs Critic verification.
-6. The completed **Full View** will display the results with green/yellow status badges:
-   - **Formalization**: The mathematical logic formula (e.g., `G(trigger -> F[0, 10ms] response)`).
-   - **Deterministic Validation**: Reports structural balance and symbol compliance.
-   - **Interpretation**: Plain-English explanation of the logic.
-   - **Critic Verdict**: PASS, NEEDS_REVISION, or BLOCKED.
+5. The application will execute the end-to-end 6-stage pipeline:
+   - **Stage 1**: Displays source requirement text, section provenance, and prerequisite dependencies.
+   - **Stage 2**: Defines atomic propositions with explicit notation (e.g. `P_RESET := power-on reset occurs`) and provenance tags.
+   - **Stage 3**: Declares state predicates, arguments (e.g. `install_task(task, rate_group)`), entities, and condition types.
+   - **Stage 4**: Displays the candidate formal mathematical logic formula referencing declared symbols (no embedded definitions).
+   - **Stage 5**: Explains the step-by-step formula construction and composition rules.
+   - **Stage 6**: Reports deterministic structural validation, canonical symbol validation, constraint provenance table, and unstated parameters.
+6. The completed **Full View** will display the results with clear status badges and findings.
 
-### 6.3 Answering Clarification Questions
+### 6.3 Batch Formalization Workflow (Section Clusters)
+When multiple related requirements belong to the same functional area:
+1. In the Document Browser, open a section containing multiple requirements (e.g., Section 3.2.1 or 3.2.2.1).
+2. Click **Batch Formalize Section**.
+3. The system executes the **Set-Level Analyst** first:
+   - Clusters requirements within section boundaries.
+   - Extracts shared domain entities, hardware devices, and signal buses.
+   - Identifies cross-requirement dependencies (e.g. `[SRS016]` -> `[SRS017]`).
+   - Generates a batch context summary injected into each requirement's reasoning prompt.
+4. Formalizes each requirement sequentially, displaying progress and status badges.
+5. Persists the complete batch run into `data/history_store.json` with aggregate status counts.
+
+### 6.4 Managing the Symbol Registry
+1. Click **Symbol Registry** in the top navigation bar (`/symbols`).
+2. The page lists all registered symbols across 7 categories:
+   - `PROPOSITION`, `PREDICATE`, `ENTITY`, `VARIABLE`, `CONSTANT`, `TEMPORAL_OPERATOR`, `LOGICAL_CONNECTIVE`.
+3. Filter symbols by category, scope (e.g. `[SRS017]` or `global`), or search keywords.
+4. Model-generated symbols are initially tagged with a **Proposal** badge.
+5. Domain engineers can inspect symbol definitions, edit notations, and click **Approve Symbol** to mark them as verified domain invariants.
+
+### 6.5 Understanding Pipeline Statuses & Badges
+The system never marks a candidate as valid merely because the pipeline finished executing. Statuses are distinguished across the pipeline, history, and UI:
+
+| Status Badge | CSS / Icon | Engineering Meaning |
+| :--- | :--- | :--- |
+| **`PASS`** | Green (`success`) <br> `bi-check-circle-fill` | **Accepted Candidate**: The formula passed independent Critic review, satisfied all deterministic structural checks, complied with canonical symbol registry definitions, and has **zero** open clarification items. |
+| **`PASS (NEEDS CLARIFICATION)`** | Yellow (`warning`) <br> `bi-question-circle-fill` | **Clarification Required**: The mathematical formula is syntactically and symbolically valid, but unstated parameters, missing timing thresholds, or engineer assumptions require human review before final verification. |
+| **`INVALID FORMULA`** | Red (`danger`) <br> `bi-slash-circle-fill` | **Candidate Rejected by Validation**: The formula failed deterministic structural validation (e.g., unbalanced parentheses, operator missing operand) or symbol validation (e.g., undeclared predicate symbol, unjustified `U` operator, or embedded `:=` definition prose). Cannot be accepted regardless of Critic assessment. |
+| **`REVISION LIMIT REACHED`** | Yellow (`warning`) <br> `bi-arrow-repeat` | **Revision Limit Reached**: The automated reasoning-critic loop exhausted its configured limit (e.g., 2 passes) without reaching complete convergence. All candidate iterations and critic findings are preserved for engineer inspection. |
+| **`BLOCKED`** | Red (`danger`) <br> `bi-x-octagon-fill` | **Critic Blocked**: The Critic identified an unresolvable contradiction or explicit requirement impossibility preventing further automated revision passes. |
+| **`FAILED`** | Red (`danger`) <br> `bi-x-circle-fill` | **Execution Failure**: The pipeline encountered a system-level runtime error (e.g., Ollama daemon unreachable, SQLite read error, or invalid JSON payload). The specific failing stage is flagged in the error banner. |
+
+### 6.6 Deterministic Validation vs. Semantic Correctness
+It is critical for ADE engineers and reviewers to understand the division of responsibility:
+- **Deterministic Validation (Algorithmic)**:
+  - Validates that delimiters (`()`, `[]`, `{}`) are strictly balanced.
+  - Validates that temporal operators (`G`, `F`, `X`) have explicit operands.
+  - Validates that logical connectives (`->`, `&&`, `||`) have operands on both sides.
+  - Validates that every referenced proposition and predicate argument is declared in the intermediate representation or Symbol Registry.
+  - Validates that definition syntax (`:=`) is not embedded into the formula.
+  - Validates that temporal Until (`U`) is justified by source requirement text keywords or structural patterns.
+  - *Limitation*: Passing deterministic validation verifies **grammatical and lexical soundness**, NOT that the formula captures the true avionics engineering intent.
+- **Semantic Correctness (Domain Review)**:
+  - Audited by the independent Critic model against the source text and retrieved pattern knowledge.
+  - Verified and confirmed by human flight-software engineers through the Full View UI and Clarification workflow.
+
+### 6.7 Answering Clarification Questions
 If a requirement has ambiguous timing bounds or unstated engineering parameters:
 1. The Full View page displays a **Clarifications** tab.
 2. Each question presents stakeholder options (e.g., selecting between 10ms or 20ms, or entering custom engineering notes).
 3. Select your answer and click **Submit Answer & Re-run**.
 4. The system incorporates your answer and automatically re-formalizes the requirement.
 
-### 6.4 Viewing Formalization History (Without Re-running Models)
+### 6.8 Viewing Formalization History (Without Re-running Models)
 You do not need to re-run expensive local models to inspect results that were generated previously:
 1. Click **Formalization History** in the top navigation bar.
 2. The page displays an overview ledger with:
    - Total runs and evaluations.
-   - Status breakdown (PASS, NEEDS CLARIFICATION, INVALID FORMULA).
+   - Status breakdown (`PASS`, `PASS (NEEDS CLARIFICATION)`, `INVALID FORMULA`, `REVISION LIMIT REACHED`, `FAILED`).
    - Reverse-chronological ledger of all single and batch runs.
    - Search box (filter by requirement ID, SRS tag, or text snippet).
 3. Click **Inspect Run** to view full mathematical formulas, interpretations, and validation findings instantly.
@@ -311,18 +403,24 @@ You do not need to re-run expensive local models to inspect results that were ge
      ```
   3. Access the application at `http://127.0.0.1:5050/`.
 
-### Problem 5: Web Page Looks Unstyled (Missing Colors, Icons, or Broken Tabs)
-- **Cause**: The browser is disconnected from the internet and could not load Bootstrap CSS/JS from the CDN link.
+### Problem 5: Web Page Styling or Icons Fail to Render
+- **Cause**: Static assets under `app/ui/static/vendor/` are missing, corrupted, or have restricted file permissions.
 - **Solution**:
-  1. If internet access was temporarily available, visit the page once to populate browser cache.
-  2. For permanent air-gapped environments, the system continues to function correctly (forms submit and data processes normally), but visual styling relies on the browser's cached stylesheet.
+  1. The application bundles all CSS, JS, and font files locally. Verify that the following files exist on disk:
+     - `app/ui/static/vendor/bootstrap/css/bootstrap.min.css`
+     - `app/ui/static/vendor/bootstrap/js/bootstrap.bundle.min.js`
+     - `app/ui/static/vendor/bootstrap-icons/bootstrap-icons.css`
+     - `app/ui/static/vendor/bootstrap-icons/fonts/bootstrap-icons.woff2`
+  2. In your browser, open Developer Tools (`F12`), switch to the **Console** or **Network** tab, and reload the page (`Ctrl + F5`). Ensure static assets return HTTP `200` status from `http://127.0.0.1:5000/static/vendor/...`.
+  3. No internet connection or CDN access is required.
 
-### Problem 6: Model Takes Several Minutes per Requirement
-- **Cause**: The computer does not have a dedicated NVIDIA GPU, so Ollama is running inference entirely on the CPU.
+### Problem 6: Model Takes 20–30 Minutes per Requirement
+- **Cause**: Pure CPU execution on an entry-level processor (e.g., dual-core Intel Core i3-7020U, 2 cores/4 threads) combined with multi-stage LLM evaluation (up to 5 sequential LLM calls per run) and memory pressure on 8 GB RAM.
 - **Solution**:
-  1. This is normal behavior for CPU inference with an 8-Billion parameter model (~2 to 4 minutes per evaluation).
-  2. To reduce execution time, reduce the **Max Revisions** slider on the formalization page from `2` to `1`.
-  3. If available, deploy on a workstation equipped with an NVIDIA GPU (Ollama detects CUDA automatically).
+  1. **Reduce Max Revisions**: On the formalization page or in configuration, set `max_revisions = 1`. This reduces the maximum number of LLM calls from 5 to 3, cutting execution time to ~12–15 minutes on dual-core hardware.
+  2. **Audit Without Re-running**: For demonstration and review purposes, use the **Formalization History** page (`/history`) to inspect pre-computed results immediately without waiting for inference.
+  3. **Free Up Physical RAM**: Close memory-heavy background applications (Google Chrome, Edge, IDEs) before starting inference to prevent Windows from paging Ollama memory to disk.
+  4. **Deploy on Recommended Hardware**: On a multi-core workstation (i7/Ryzen 7 with 16–32 GB RAM), CPU inference takes ~5–10 minutes. On a workstation with a dedicated NVIDIA GPU ($\ge$ 8 GB VRAM), inference completes in 5–15 seconds.
 
 ---
 
@@ -342,6 +440,7 @@ You can independently verify that the application makes no external connections:
 1. Open Windows PowerShell and run `netstat -ano | findstr 5000`. You will observe only internal loopback communication (`127.0.0.1:5000`).
 2. Run `netstat -ano | findstr 11434`. You will observe only internal loopback communication between Python and Ollama (`127.0.0.1:11434`).
 3. There are zero outbound sockets opened to any external IP address.
+4. Inspection of `app/ui/templates/base.html` confirms all stylesheet and script references use local static routing (`url_for('static', filename='vendor/...')`) with zero external CDN references.
 
 ### 8.3 Safe Backup Procedure
 To back up all generated formalizations, user clarifications, and settings:
@@ -351,12 +450,12 @@ Simply copy the **`data/`** directory and **`srs_canonical.db`** file to a secur
 
 ## 9. Known Limitations and Future Deployment Enhancements
 
-1. **Local Static Asset Bundling**:
-   - The user interface currently references Bootstrap via CDN (`jsdelivr.net`).
-   - *Future Work*: Download `bootstrap.min.css`, `bootstrap.bundle.min.js`, and `bootstrap-icons` directly into an `app/ui/static/` directory so that styling is 100% self-hosted on completely fresh machines without warming the browser cache.
+1. **Local Static Asset Bundling (Resolved in Current Release)**:
+   - All Bootstrap 5.3.0 and Bootstrap Icons 1.10.0 stylesheets, JavaScript bundles, and font binaries (`woff2`, `woff`) are now bundled directly under `app/ui/static/vendor/` with official MIT licenses.
+   - The user interface operates 100% offline out-of-the-box on fresh, air-gapped systems without requiring external network connectivity or pre-warmed browser caches.
 2. **Synchronous Web Inference**:
    - Running formalization blocks the Flask web thread until the model finishes responding.
-   - When running on CPU, the browser tab shows a loading spinner for 2 to 4 minutes. The page should not be refreshed during this period.
+   - When running on dual-core CPU hardware, the browser tab shows a loading spinner during the run. The page should not be refreshed or interrupted during this period.
 3. **Linux / Unix Verification**:
    - The application has been developed and verified on Windows 10/11. While Python code is largely cross-platform, deployment on ADE Linux workstations has not yet been formally verified in this milestone.
 
@@ -373,6 +472,7 @@ Before handing the workstation over to end-users at ADE, verify each item:
 - [ ] **Database Present**: `srs_canonical.db` exists in the project root directory.
 - [ ] **Knowledge Vault Intact**: `SRS-Knowledge/Index/Pattern-Registry.json` is present.
 - [ ] **Symbols Registered**: `data/symbol_registry.json` is present.
+- [ ] **Offline UI Assets Present**: `app/ui/static/vendor/` contains Bootstrap and Bootstrap Icons stylesheets, scripts, and fonts. Web UI renders completely styled without internet access.
 - [ ] **Air-Gap Verification**: Disconnect the network cable / Wi-Fi.
 - [ ] **Server Starts**: `python run_ui.py` displays `Running on http://127.0.0.1:5000`.
 - [ ] **Web UI Loads**: Navigating to `http://127.0.0.1:5000/` opens the SRS Formalization Dashboard.

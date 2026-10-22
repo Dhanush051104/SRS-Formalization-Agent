@@ -41,12 +41,14 @@ def _classify_result_dict(res: Dict[str, Any]) -> Dict[str, str]:
         return {"label": "INVALID FORMULA", "css": "danger"}
     if status == "BLOCKED":
         return {"label": "BLOCKED", "css": "danger"}
-    if status == "PASS":
+    if status in ("MAX_ITERATIONS", "MAX_ITERATIONS_REACHED"):
+        return {"label": "REVISION LIMIT REACHED", "css": "warning"}
+    if status in ("PASS", "PASS (NEEDS CLARIFICATION)"):
         has_open = any(
             (q.get("status") if isinstance(q, dict) else getattr(q, "status", "OPEN")) == "OPEN"
             for q in clarifications
         )
-        if has_open:
+        if has_open or status == "PASS (NEEDS CLARIFICATION)":
             return {"label": "PASS (NEEDS CLARIFICATION)", "css": "warning"}
         return {"label": "PASS", "css": "success"}
     return {"label": status.replace("_", " "), "css": "warning"}

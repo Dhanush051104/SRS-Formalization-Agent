@@ -50,6 +50,14 @@ def validate_formalization(expression: Optional[str]) -> FormalizationValidation
     if delimiter_problem:
         findings.append(_finding("UNBALANCED_DELIMITER", delimiter_problem))
 
+    if ":=" in text:
+        findings.append(_finding(
+            "DEFINITION_EMBEDDED_IN_FORMULA",
+            "Formalization contains definition syntax ':=' or embedded prose definition. "
+            "Formulas must reference declared symbols without embedding definition text.",
+            recommendation="Remove ':=' and definition prose from formalization. Reference only declared symbol names.",
+        ))
+
     if _has_operandless_temporal_operator(text):
         findings.append(_finding(
             "INCOMPLETE_TEMPORAL_OPERATOR",
@@ -92,11 +100,11 @@ def _has_operandless_temporal_operator(text: str) -> bool:
     return False
 
 
-def _finding(rule: str, description: str) -> dict:
+def _finding(rule: str, description: str, recommendation: Optional[str] = None) -> dict:
     return {
         "category": "FORMALIZATION_STRUCTURE",
         "severity": "ERROR",
         "rule": rule,
         "description": description,
-        "recommendation": "Revise the formula so every operator has a complete operand and delimiters balance.",
+        "recommendation": recommendation or "Revise the formula so every operator has a complete operand and delimiters balance.",
     }

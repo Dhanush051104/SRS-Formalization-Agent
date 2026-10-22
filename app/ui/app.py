@@ -29,6 +29,7 @@ from app.db.target_service import (
 from app.ui.model_config import load_model_config, save_model_config
 from app.ui.result_store import get as get_saved_result, get_saved_at, save as save_result
 from app.ui import history_store
+from app.symbols.symbol_registry import SymbolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -154,12 +155,14 @@ def classify_result(result):
         return {"label": "INVALID FORMULA", "css": "danger", "icon": "bi-slash-circle-fill"}
     if status == "BLOCKED":
         return {"label": "BLOCKED", "css": "danger", "icon": "bi-x-octagon-fill"}
-    if status == "PASS":
+    if status in ("MAX_ITERATIONS", "MAX_ITERATIONS_REACHED"):
+        return {"label": "REVISION LIMIT REACHED", "css": "warning", "icon": "bi-arrow-repeat"}
+    if status in ("PASS", "PASS (NEEDS CLARIFICATION)"):
         has_open = any(
             (q.get("status") if isinstance(q, dict) else getattr(q, "status", "OPEN")) == "OPEN"
             for q in clarifications
         )
-        if has_open:
+        if has_open or status == "PASS (NEEDS CLARIFICATION)":
             return {"label": "PASS (NEEDS CLARIFICATION)", "css": "warning", "icon": "bi-question-circle-fill"}
         return {"label": "PASS", "css": "success", "icon": "bi-check-circle-fill"}
     return {"label": status.replace("_", " "), "css": "warning", "icon": "bi-exclamation-triangle-fill"}
@@ -786,14 +789,31 @@ def batch_formalize():
     pipeline, config_error = _build_pipeline_or_error()
 
     results = []
-    for rid in req_ids:
-        if pipeline is None:
-            res = _failed_result(rid, "OLLAMA_CONFIGURATION", config_error)
-        else:
+    if pipeline is None:
+        for rid in req_ids:
+            results.append(_failed_result(rid, "OLLAMA_CONFIGURATION", config_error))
+    elif hasattr(pipeline, "run_batch"):
+        clarifs_by_req = {}
+        for rid in req_ids:
+            stored = get_saved_result(rid)
+            if stored and stored.clarifications:
+                clarifs_by_req[rid] = stored.clarifications
+        try:
+            results = pipeline.run_batch(req_ids, max_revisions=max_revisions, clarifications_by_req=clarifs_by_req)
+        except Exception:
+            logger.exception("Batch formalization pipeline encountered error, falling back to sequential run")
+            results = []
+            for rid in req_ids:
+                stored = get_saved_result(rid)
+                clarifs = stored.clarifications if stored else None
+                results.append(_run_one(pipeline, rid, max_revisions, clarifications=clarifs))
+    else:
+        for rid in req_ids:
             stored = get_saved_result(rid)
             clarifs = stored.clarifications if stored else None
-            res = _run_one(pipeline, rid, max_revisions, clarifications=clarifs)
-        results.append(res)
+            results.append(_run_one(pipeline, rid, max_revisions, clarifications=clarifs))
+
+    for res in results:
         _store_result(res)
 
     # Record completed batch run in persistent history store
@@ -872,6 +892,210 @@ def history_run_detail(run_id):
         "history_run_detail.html",
         run=run,
     )
+
+
+def _get_symbol_registry() -> SymbolRegistry:
+    registry = SymbolRegistry()
+    registry.load()
+    return registry
+
+
+@app.route("/symbols")
+def symbol_registry_dashboard():
+    """
+    Displays the user-manageable Symbol Registry dashboard.
+    Enables search, categorization, scope filtering, and status filtering.
+    """
+    registry = _get_symbol_registry()
+    query = request.args.get("q", "").strip()
+    category_filter = request.args.get("category", "ALL").strip()
+    status_filter = request.args.get("status", "all").strip()
+    scope_filter = request.args.get("scope", "").strip()
+
+    all_symbols = registry.get_all_symbols()
+    category_counts: dict = {}
+    for s in all_symbols:
+        category_counts[s.category] = category_counts.get(s.category, 0) + 1
+
+    stats = {
+        "total_symbols": len(all_symbols),
+        "active_count": sum(1 for s in all_symbols if s.is_active),
+        "deactivated_count": sum(1 for s in all_symbols if not s.is_active),
+        "user_approved_count": sum(1 for s in all_symbols if s.user_approved),
+        "category_counts": category_counts,
+    }
+
+    filtered_symbols = registry.search_symbols(
+        query=query if query else None,
+        category=category_filter if category_filter != "ALL" else None,
+        scope=scope_filter if scope_filter else None,
+        status=status_filter if status_filter != "all" else None,
+    )
+
+    return render_template(
+        "symbols.html",
+        symbols=filtered_symbols,
+        stats=stats,
+        query=query,
+        category_filter=category_filter,
+        status_filter=status_filter,
+        scope_filter=scope_filter,
+    )
+
+
+@app.route("/symbols/<identifier>")
+def symbol_detail(identifier):
+    """
+    Detailed inspection page for a registered symbol.
+    Shows formal identity, editable definitions, provenance, and historical usage references.
+    """
+    registry = _get_symbol_registry()
+    symbol = registry.get_symbol_by_identifier(identifier)
+    if not symbol:
+        flash(f"Symbol '{identifier}' not found in registry.", "warning")
+        return redirect(url_for("symbol_registry_dashboard"))
+
+    refs = registry.find_symbol_references(identifier)
+    return render_template(
+        "symbol_detail.html",
+        symbol=symbol,
+        refs=refs,
+    )
+
+
+@app.route("/symbols/<identifier>/edit", methods=["POST"])
+def edit_symbol(identifier):
+    """
+    Updates symbol definition, signature, arity, and notes.
+    Marks user_approved=True to protect against automated model overwriting.
+    """
+    registry = _get_symbol_registry()
+    new_definition = request.form.get("definition", "").strip()
+    signature = request.form.get("signature", "").strip() or None
+    arity_raw = request.form.get("arity", "").strip()
+    notes = request.form.get("notes", "").strip() or None
+
+    arity = None
+    if arity_raw:
+        try:
+            arity = int(arity_raw)
+        except ValueError:
+            arity = None
+
+    if not new_definition:
+        flash("Symbol definition cannot be empty.", "danger")
+        return redirect(url_for("symbol_detail", identifier=identifier))
+
+    try:
+        updated = registry.update_symbol_definition(
+            identifier=identifier,
+            new_definition=new_definition,
+            notes=notes,
+            arity=arity,
+            signature=signature,
+            user_approved=True,
+        )
+        flash(f"Symbol '{updated.spelling}' definition updated successfully.", "success")
+    except Exception as e:
+        flash(f"Failed to update symbol: {e}", "danger")
+
+    return redirect(url_for("symbol_detail", identifier=identifier))
+
+
+@app.route("/symbols/<identifier>/deactivate", methods=["POST"])
+def deactivate_symbol_route(identifier):
+    """
+    Deactivates a symbol (soft delete) to prevent downstream use while protecting historical integrity.
+    """
+    registry = _get_symbol_registry()
+    try:
+        updated = registry.deactivate_symbol(identifier)
+        flash(f"Symbol '{updated.spelling}' has been deactivated. Downstream formalization will no longer use it.", "warning")
+    except Exception as e:
+        flash(f"Failed to deactivate symbol: {e}", "danger")
+
+    return redirect(url_for("symbol_detail", identifier=identifier))
+
+
+@app.route("/symbols/<identifier>/activate", methods=["POST"])
+def activate_symbol_route(identifier):
+    """
+    Reactivates a previously deactivated symbol.
+    """
+    registry = _get_symbol_registry()
+    try:
+        updated = registry.activate_symbol(identifier)
+        flash(f"Symbol '{updated.spelling}' has been reactivated.", "success")
+    except Exception as e:
+        flash(f"Failed to reactivate symbol: {e}", "danger")
+
+    return redirect(url_for("symbol_detail", identifier=identifier))
+
+
+@app.route("/symbols/<identifier>/delete", methods=["POST"])
+def delete_symbol_route(identifier):
+    """
+    Safely deletes an unreferenced symbol.
+    Blocks deletion if referenced in past results or if core operator.
+    """
+    registry = _get_symbol_registry()
+    try:
+        registry.delete_symbol(identifier, force=False)
+        flash(f"Symbol '{identifier}' was permanently removed.", "success")
+        return redirect(url_for("symbol_registry_dashboard"))
+    except Exception as e:
+        flash(f"Deletion blocked: {e}", "danger")
+        return redirect(url_for("symbol_detail", identifier=identifier))
+
+
+@app.route("/symbols/register", methods=["POST"])
+def register_symbol_route():
+    """
+    Registers a new domain symbol via the UI modal.
+    """
+    spelling = request.form.get("spelling", "").strip()
+    category = request.form.get("category", "PREDICATE").strip().upper()
+    scope = request.form.get("scope", "global").strip()
+    definition = request.form.get("definition", "").strip()
+    signature = request.form.get("signature", "").strip() or None
+    arity_raw = request.form.get("arity", "").strip()
+    notes = request.form.get("notes", "").strip() or None
+    aliases_raw = request.form.get("aliases", "").strip()
+
+    if not spelling or not definition:
+        flash("Spelling and Definition are required fields.", "danger")
+        return redirect(url_for("symbol_registry_dashboard"))
+
+    arity = None
+    if arity_raw:
+        try:
+            arity = int(arity_raw)
+        except ValueError:
+            arity = None
+
+    aliases = [a.strip() for a in aliases_raw.split(",") if a.strip()] if aliases_raw else []
+
+    registry = _get_symbol_registry()
+    try:
+        sym, created = registry.register_domain_symbol(
+            spelling=spelling,
+            category=category,
+            scope=scope,
+            definition=definition,
+            arity=arity,
+            signature=signature,
+            notes=notes,
+            aliases=aliases,
+            user_approved=True,
+        )
+        if created:
+            flash(f"Symbol '{sym.spelling}' successfully registered in scope '{sym.scope}'.", "success")
+        else:
+            flash(f"Symbol '{sym.spelling}' already exists in scope '{sym.scope}' and has been updated.", "info")
+    except Exception as e:
+        flash(f"Failed to register symbol: {e}", "danger")
+
+    return redirect(url_for("symbol_registry_dashboard"))
 
 
 if __name__ == "__main__":

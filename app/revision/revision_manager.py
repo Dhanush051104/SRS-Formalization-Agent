@@ -111,6 +111,7 @@ class RevisionManager:
                     predicates=reasoning_res.predicates,
                     entities=reasoning_res.identified_entities,
                     current_scope=scope,
+                    intermediate_representation=reasoning_res.intermediate_representation,
                 )
                 if not symbol_report.is_valid:
                     for v in symbol_report.violations:

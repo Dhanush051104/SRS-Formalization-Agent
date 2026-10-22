@@ -8,6 +8,8 @@ from app.analyst.schemas import (
     NonCanonicalPatternError,
 )
 
+from app.analyst.set_analyst import CrossDependency, SetAnalysisResult, SetAnalyst
+
 __all__ = [
     "AnalystModel",
     "OllamaAnalyst",
@@ -18,4 +20,7 @@ __all__ = [
     "AnalystError",
     "AnalystValidationError",
     "NonCanonicalPatternError",
+    "SetAnalyst",
+    "SetAnalysisResult",
+    "CrossDependency",
 ]

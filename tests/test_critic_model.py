@@ -270,6 +270,72 @@ class TestCriticModelUnit(unittest.TestCase):
             critic.critique(self.context_package, self.reasoning_result)
         self.assertIn("Failed to parse model output as JSON", str(ctx.exception))
 
+    def test_ollama_critic_recovers_missing_requirement_id_from_trusted_context(self):
+        """Test recovery when LLM omits requirement identity keys from Critic JSON response."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.message.content = json.dumps({
+            "status": "PASS",
+            "findings": [],
+            "missing_constraints": [],
+            "unsupported_assumptions": [],
+            "contradictions": [],
+            "traceability_issues": [],
+            "pattern_coverage": {"covered_patterns": ["Timeout / Deadline"]},
+            "formalization_assessment": "Formalization is complete.",
+            "revision_required": False,
+            "summary": "Passed critique.",
+        })
+        mock_client.chat.return_value = mock_response
+
+        critic = OllamaCritic(model="llama3:latest", client=mock_client)
+        result = critic.critique(self.context_package, self.reasoning_result)
+
+        self.assertEqual(result.requirement_id, 8)
+        self.assertEqual(result.global_number, 8)
+        self.assertEqual(result.srs_id, "[SRS178]")
+        self.assertEqual(result.status, "PASS")
+
+    def test_critic_result_from_dict_missing_fields_raise_informative_error(self):
+        """Test that CriticResult.from_dict raises informative CriticValidationError instead of KeyError."""
+        with self.assertRaises(CriticValidationError) as ctx:
+            CriticResult.from_dict({"global_number": 8, "srs_id": "[SRS178]"})
+        self.assertIn("missing required field 'requirement_id'", str(ctx.exception))
+
+        with self.assertRaises(CriticValidationError) as ctx2:
+            CriticResult.from_dict({"requirement_id": 8, "srs_id": "[SRS178]"})
+        self.assertIn("missing required field 'global_number'", str(ctx2.exception))
+
+        with self.assertRaises(CriticValidationError) as ctx3:
+            CriticResult.from_dict({"requirement_id": 8, "global_number": 8})
+        self.assertIn("missing required field 'srs_id'", str(ctx3.exception))
+
+    def test_ollama_critic_detects_explicit_requirement_id_mismatch(self):
+        """Test that explicit conflicting requirement_id from the critic model is rejected."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.message.content = json.dumps({
+            "requirement_id": 999,
+            "global_number": 8,
+            "srs_id": "[SRS178]",
+            "status": "PASS",
+            "findings": [],
+            "missing_constraints": [],
+            "unsupported_assumptions": [],
+            "contradictions": [],
+            "traceability_issues": [],
+            "pattern_coverage": {},
+            "formalization_assessment": "Done.",
+            "revision_required": False,
+            "summary": "Passed.",
+        })
+        mock_client.chat.return_value = mock_response
+
+        critic = OllamaCritic(model="llama3:latest", client=mock_client)
+        with self.assertRaises(CriticValidationError) as ctx:
+            critic.critique(self.context_package, self.reasoning_result)
+        self.assertIn("requirement_id mismatch", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

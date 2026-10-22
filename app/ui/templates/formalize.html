@@ -32,7 +32,7 @@
             </div>
 
             <!-- Execution Action Controls -->
-            <form action="{{ url_for('formalize_requirement', req_id=req.id) }}" method="POST" class="d-flex align-items-center gap-2">
+            <form action="{{ url_for('formalize_requirement', req_id=(req.id if req.id is defined else req.requirement_id)) }}" method="POST" class="d-flex align-items-center gap-2">
                 <input type="hidden" name="max_revisions" value="2">
                 <button type="submit" class="btn btn-success font-weight-bold">
                     <i class="bi bi-play-circle-fill me-1"></i>{% if result %}Re-Run Pipeline{% else %}Run Formalization{% endif %}
@@ -129,84 +129,432 @@
         <div class="card-body p-4 bg-white">
             <div class="tab-content" id="pipelineTabsContent">
 
-                <!-- 1. Formalization Tab -->
+                <!-- 1. Formalization Tab (Staged Execution Flow) -->
                 <div class="tab-pane fade show active" id="formalization" role="tabpanel">
-                    <div class="mb-4">
-                        <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Mathematical Logic Representation</h6>
-                        <div class="p-3 bg-dark text-light rounded font-monospace fs-5">
-                            {{ result.formalization or "No formalization generated." }}
+                    {% set ir = result.intermediate_representation %}
+
+                    <!-- STAGE 1: Source Requirement and Dependencies -->
+                    <div class="card mb-4 border">
+                        <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                            <h6 class="text-uppercase text-dark small font-weight-bold mb-0">
+                                <span class="badge bg-secondary me-2">Stage 1</span>Source Requirement & Dependencies
+                            </h6>
+                            <span class="badge bg-light text-dark border">{{ req.srs_id }}</span>
                         </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Deterministic Validation</h6>
-                        {% if result.validation_valid is none %}
-                            <p class="small text-muted mb-0">Validation was not recorded for this result.</p>
-                        {% elif result.validation_valid %}
-                            <div class="alert alert-success py-2 small mb-0">Structural validation passed.</div>
-                        {% else %}
-                            <div class="alert alert-danger py-2 small mb-2">Structural validation FAILED. This formula is not accepted as valid, regardless of the critic's assessment.</div>
-                            <ul class="small mb-0">
-                                {% for vf in result.validation_findings %}<li><span class="badge bg-danger me-1">{{ vf.rule }}</span>{{ vf.description }}</li>{% endfor %}
-                            </ul>
-                        {% endif %}
-                        <p class="small text-muted mt-2 mb-0">Structural check only: it does not establish that the formula is semantically correct for the requirement.</p>
-                    </div>
-
-                    <div class="mb-4">
-                        <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Natural Language Interpretation</h6>
-                        <p class="text-dark">{{ result.interpretation or "N/A" }}</p>
-                    </div>
-
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="border rounded p-3 h-100">
-                                <h6 class="text-success small font-weight-bold mb-2"><i class="bi bi-tag-fill me-1"></i>Identified Entities</h6>
-                                {% if result.entities %}
-                                    <ul class="mb-0 small ps-3">
-                                        {% for ent in result.entities %}<li>{{ ent }}</li>{% endfor %}
-                                    </ul>
-                                {% else %}<span class="text-muted small">None</span>{% endif %}
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="small text-muted fw-bold mb-1">Exact Raw Requirement Text (SQLite):</div>
+                                <p class="font-monospace text-dark p-3 bg-light border-start border-success border-4 rounded mb-0">
+                                    "{{ req.raw_text }}"
+                                </p>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <div class="small"><strong>SRS Identifier:</strong> <code>{{ req.srs_id }}</code> (Global R{{ req.global_number }})</div>
+                                    <div class="small"><strong>Section:</strong> {{ req.section_number }} &mdash; {{ req.section_title }}</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="small"><strong>Prerequisite Dependencies:</strong></div>
+                                    {% if result.dependencies %}
+                                        <ul class="mb-0 small ps-3">
+                                            {% for dep in result.dependencies %}
+                                                <li><code>{{ dep }}</code></li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% elif result.set_context and result.set_context.cross_dependencies %}
+                                        <ul class="mb-0 small ps-3">
+                                            {% for dep in result.set_context.cross_dependencies %}
+                                                <li><code>{{ dep }}</code></li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% else %}
+                                        <span class="text-muted small">None recorded (independent requirement).</span>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="col-md-6">
-                            <div class="border rounded p-3 h-100">
-                                <h6 class="text-success small font-weight-bold mb-2"><i class="bi bi-cpu me-1"></i>Predicates & Conditions</h6>
-                                {% if result.predicates %}
+                    <!-- STAGE 2: Explicit Propositions -->
+                    <div class="card mb-4 border">
+                        <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                            <h6 class="text-uppercase text-dark small font-weight-bold mb-0">
+                                <span class="badge bg-primary me-2">Stage 2</span>Propositions & Predicates (Intermediate Representation)
+                            </h6>
+                            {% if ir and ir.propositions %}
+                                <span class="badge bg-primary">{{ ir.propositions|length }} Defined</span>
+                            {% endif %}
+                        </div>
+                        <div class="card-body">
+                            <p class="small text-muted mb-3">
+                                Atomic propositions explicitly defined in mathematical notation (<code>P := Definition</code>). Capability provisions are separated from invocation events.
+                            </p>
+                            {% if ir and ir.propositions %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered table-hover align-middle small mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 28%;">Symbol / Notation</th>
+                                                <th style="width: 14%;">Category</th>
+                                                <th style="width: 32%;">Formal Definition</th>
+                                                <th style="width: 13%;">Source Reference</th>
+                                                <th style="width: 13%;">Provenance & Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for prop in ir.propositions %}
+                                            <tr>
+                                                <td class="font-monospace fw-bold text-primary">
+                                                    <code>{{ prop.notation or (prop.symbol ~ ' := ' ~ prop.definition) }}</code>
+                                                </td>
+                                                <td><span class="badge bg-primary">PROPOSITION</span></td>
+                                                <td>{{ prop.definition or prop.notation or 'N/A' }}</td>
+                                                <td><span class="text-muted">{{ prop.source_reference or result.srs_id }}</span></td>
+                                                <td>
+                                                    <span class="badge {% if prop.provenance == 'EXPLICIT_SOURCE' %}bg-success{% elif prop.provenance == 'UNRESOLVED' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                                        {{ prop.provenance or 'EXPLICIT_SOURCE' }}
+                                                    </span>
+                                                    {% if prop.user_approved %}
+                                                        <span class="badge bg-success ms-1"><i class="bi bi-check-circle me-1"></i>Approved</span>
+                                                    {% else %}
+                                                        <span class="badge bg-light text-muted border ms-1">Proposal</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% elif ir and ir.atomic_clauses %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered table-hover align-middle small mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 35%;">Clause Notation</th>
+                                                <th style="width: 15%;">Category</th>
+                                                <th style="width: 50%;">Description</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for ac in ir.atomic_clauses %}
+                                            <tr>
+                                                <td class="font-monospace fw-bold text-primary"><code>{{ ac }}</code></td>
+                                                <td><span class="badge bg-primary">CLAUSE</span></td>
+                                                <td>Propositional clause derived from intermediate representation</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-light border py-2 small mb-0 text-muted">
+                                    <i class="bi bi-info-circle me-1"></i>No explicit propositions recorded in intermediate representation.
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- STAGE 3: Predicates and Definitions -->
+                    <div class="card mb-4 border">
+                        <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                            <h6 class="text-uppercase text-dark small font-weight-bold mb-0">
+                                <span class="badge bg-info text-dark me-2">Stage 3</span>Predicates & Domain Definitions
+                            </h6>
+                            {% if ir and ir.predicates %}
+                                <span class="badge bg-info text-dark">{{ ir.predicates|length }} Predicates</span>
+                            {% endif %}
+                        </div>
+                        <div class="card-body">
+                            <p class="small text-muted mb-3">
+                                State predicates, triggers, actions, and referenced domain entities with arguments and condition types.
+                            </p>
+                            {% if ir and ir.predicates %}
+                                <div class="table-responsive mb-3">
+                                    <table class="table table-sm table-bordered table-hover align-middle small mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 25%;">Predicate Notation</th>
+                                                <th style="width: 16%;">Condition Type</th>
+                                                <th style="width: 31%;">Description</th>
+                                                <th style="width: 15%;">Arguments / Entity</th>
+                                                <th style="width: 13%;">Provenance & Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for pred in ir.predicates %}
+                                            <tr>
+                                                <td class="font-monospace fw-bold text-info">
+                                                    <code>{{ pred.notation or pred.name }}</code>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-info text-dark">{{ pred.condition_type or 'STATE' }}</span>
+                                                </td>
+                                                <td>
+                                                    {{ pred.description or pred.formal_expression or 'Domain predicate' }}
+                                                    {% if pred.formal_expression and pred.description %}
+                                                        <div class="text-muted font-monospace small">Expr: {{ pred.formal_expression }}</div>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if pred.arguments %}
+                                                        <span class="font-monospace small">({{ pred.arguments|join(', ') }})</span>
+                                                    {% elif pred.entity %}
+                                                        <span class="badge bg-light text-dark border">{{ pred.entity }}</span>
+                                                    {% else %}
+                                                        <span class="text-muted">None</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <span class="badge {% if pred.provenance == 'EXPLICIT_SOURCE' %}bg-success{% elif pred.provenance == 'UNRESOLVED' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                                        {{ pred.provenance or 'EXPLICIT_SOURCE' }}
+                                                    </span>
+                                                    {% if pred.user_approved %}
+                                                        <span class="badge bg-success ms-1"><i class="bi bi-check-circle me-1"></i>Approved</span>
+                                                    {% else %}
+                                                        <span class="badge bg-light text-muted border ms-1">Proposal</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% elif result.predicates %}
+                                <div class="mb-3">
+                                    <h6 class="small text-muted fw-bold mb-1">Identified Predicates:</h6>
                                     <ul class="mb-0 small ps-3">
                                         {% for pred in result.predicates %}<li><code>{{ pred }}</code></li>{% endfor %}
                                     </ul>
-                                {% else %}<span class="text-muted small">None</span>{% endif %}
-                            </div>
-                        </div>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-light border py-2 small mb-3 text-muted">
+                                    <i class="bi bi-info-circle me-1"></i>No explicit predicates recorded.
+                                </div>
+                            {% endif %}
 
-                        <div class="col-md-6">
-                            <div class="border rounded p-3 h-100">
-                                <h6 class="text-success small font-weight-bold mb-2"><i class="bi bi-clock-history me-1"></i>Temporal & Boundary Constraints</h6>
-                                {% if result.temporal_constraints %}
-                                    <ul class="mb-0 small ps-3">
-                                        {% for tc in result.temporal_constraints %}<li>{{ tc }}</li>{% endfor %}
-                                    </ul>
-                                {% else %}<span class="text-muted small">None</span>{% endif %}
-                            </div>
+                            <!-- Domain Entities -->
+                            {% if ir and ir.entities %}
+                                <div class="mt-3">
+                                    <h6 class="small text-muted fw-bold mb-2">Referenced Domain Entities:</h6>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        {% for ent in ir.entities %}
+                                            <span class="badge bg-light text-dark border py-2 px-3">
+                                                <strong>{{ ent.name }}</strong>
+                                                {% if ent.category %}<span class="text-muted">({{ ent.category }})</span>{% endif %}
+                                                {% if ent.description %}&mdash; <span class="fw-normal">{{ ent.description }}</span>{% endif %}
+                                            </span>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% elif result.entities %}
+                                <div class="mt-2">
+                                    <h6 class="small text-muted fw-bold mb-1">Identified Entities:</h6>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        {% for ent in result.entities %}
+                                            <span class="badge bg-secondary">{{ ent }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
                         </div>
+                    </div>
 
-                        <div class="col-md-6">
-                            <div class="border rounded p-3 h-100">
-                                <h6 class="text-success small font-weight-bold mb-2"><i class="bi bi-gear-fill me-1"></i>Actions & System Effects</h6>
-                                {% if result.actions %}
-                                    <ul class="mb-0 small ps-3">
-                                        {% for act in result.actions %}<li>{{ act }}</li>{% endfor %}
-                                    </ul>
-                                {% else %}<span class="text-muted small">None</span>{% endif %}
+                    <!-- STAGE 4: Final Mathematical Formula -->
+                    <div class="card mb-4 border">
+                        <div class="card-header bg-light py-2">
+                            <h6 class="text-uppercase text-dark small font-weight-bold mb-0">
+                                <span class="badge bg-success me-2">Stage 4</span>Final Mathematical Formula
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="p-3 bg-dark text-light rounded font-monospace fs-5">
+                                    {{ result.formalization or "No formalization generated." }}
+                                </div>
+                            </div>
+                            <div class="mb-0">
+                                <h6 class="text-uppercase text-muted small font-weight-bold mb-1">Natural Language Interpretation</h6>
+                                <p class="text-dark mb-0">{{ result.interpretation or "N/A" }}</p>
                             </div>
                         </div>
                     </div>
-                    <div class="row g-3 mt-1">
-                        <div class="col-md-6"><div class="border rounded p-3 h-100"><h6 class="small text-success">Assumptions</h6>{% if result.assumptions %}<ul class="small mb-0">{% for item in result.assumptions %}<li>{{ item }}</li>{% endfor %}</ul>{% else %}<span class="small text-muted">None recorded.</span>{% endif %}</div></div>
-                        <div class="col-md-6"><div class="border rounded p-3 h-100"><h6 class="small text-success">Unresolved items</h6>{% if result.unresolved_items %}<ul class="small mb-0">{% for item in result.unresolved_items %}<li>{{ item }}</li>{% endfor %}</ul>{% else %}<span class="small text-muted">None recorded.</span>{% endif %}</div></div>
+
+                    <!-- STAGE 5: Formula Construction Explanation -->
+                    <div class="card mb-4 border">
+                        <div class="card-header bg-light py-2">
+                            <h6 class="text-uppercase text-dark small font-weight-bold mb-0">
+                                <span class="badge bg-warning text-dark me-2">Stage 5</span>Formula Construction & Composition
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            {% if ir and ir.formula_construction %}
+                                <div class="mb-3">
+                                    <h6 class="small text-muted fw-bold mb-1">Step-by-Step Construction Rationale:</h6>
+                                    <p class="small text-dark mb-0 bg-light p-3 rounded border font-monospace">{{ ir.formula_construction }}</p>
+                                </div>
+                            {% else %}
+                                <p class="small text-muted mb-2">No formula construction rationale recorded.</p>
+                            {% endif %}
+                            {% if ir and ir.composition_rules %}
+                                <div class="mb-0">
+                                    <h6 class="small text-muted fw-bold mb-1">Composition Rules:</h6>
+                                    <ul class="small ps-3 mb-0">
+                                        {% for cr in ir.composition_rules %}
+                                            <li><code>{{ cr }}</code></li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            {% endif %}
+                        </div>
                     </div>
+
+                    <!-- STAGE 6: Validation, Provenance & Unresolved Questions -->
+                    <div class="card mb-4 border">
+                        <div class="card-header bg-light py-2">
+                            <h6 class="text-uppercase text-dark small font-weight-bold mb-0">
+                                <span class="badge bg-danger me-2">Stage 6</span>Validation, Provenance & Unresolved Questions
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <!-- 6a. Deterministic Validation -->
+                            <div class="mb-4">
+                                <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Deterministic Validation</h6>
+                                {% if result.validation_valid is none %}
+                                    <p class="small text-muted mb-0">Validation was not recorded for this result.</p>
+                                {% elif result.validation_valid %}
+                                    <div class="alert alert-success py-2 small mb-0">
+                                        <i class="bi bi-check-circle-fill me-1"></i>Structural validation passed.
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-danger py-2 small mb-2">
+                                        <i class="bi bi-x-circle-fill me-1"></i>Structural validation FAILED. This formula is not accepted as valid, regardless of the critic's assessment.
+                                    </div>
+                                    <ul class="small mb-0">
+                                        {% for vf in result.validation_findings %}
+                                            <li><span class="badge bg-danger me-1">{{ vf.rule }}</span>{{ vf.description }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endif %}
+                                <p class="small text-muted mt-2 mb-0">Structural check only: it does not establish that the formula is semantically correct for the requirement.</p>
+                            </div>
+
+                            <!-- 6b. Constraint Provenance -->
+                            {% if result.constraint_provenance %}
+                            <div class="mb-4">
+                                <h6 class="text-uppercase text-muted small font-weight-bold mb-2">
+                                    <i class="bi bi-shield-check text-success me-1"></i>Constraint Provenance & Source Grounding
+                                </h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered table-hover align-middle small mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 10%;">ID</th>
+                                                <th style="width: 35%;">Constraint Statement</th>
+                                                <th style="width: 20%;">Provenance Category</th>
+                                                <th style="width: 35%;">Source Grounding / Justification</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for cp in result.constraint_provenance %}
+                                            <tr>
+                                                <td class="font-monospace fw-bold">{{ cp.constraint_id or ('C' ~ loop.index) }}</td>
+                                                <td>{{ cp.statement }}</td>
+                                                <td>
+                                                    {% if cp.category == 'EXPLICIT_SOURCE' %}
+                                                        <span class="badge bg-success">EXPLICIT SOURCE</span>
+                                                    {% elif cp.category == 'SUPPORTED_DEPENDENCY' %}
+                                                        <span class="badge bg-info text-dark">SUPPORTED DEPENDENCY</span>
+                                                    {% elif cp.category == 'APPROVED_DERIVATION' %}
+                                                        <span class="badge bg-primary">APPROVED DERIVATION</span>
+                                                    {% elif cp.category == 'UNRESOLVED' %}
+                                                        <span class="badge bg-warning text-dark">UNRESOLVED</span>
+                                                    {% else %}
+                                                        <span class="badge bg-danger">{{ cp.category }}</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if cp.source_text %}
+                                                        <div class="text-muted fst-italic">"{{ cp.source_text }}"</div>
+                                                    {% endif %}
+                                                    {% if cp.justification %}
+                                                        <div>{{ cp.justification }}</div>
+                                                    {% endif %}
+                                                    {% if not cp.source_text and not cp.justification %}
+                                                        <span class="text-muted">Direct requirement fact</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- 6c. Unresolved Questions & Missing Bounds -->
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <div class="border rounded p-3 h-100">
+                                        <h6 class="small text-danger fw-bold mb-2"><i class="bi bi-question-circle me-1"></i>Unresolved Items / Questions</h6>
+                                        {% if result.unresolved_items %}
+                                            <ul class="small mb-0 ps-3">
+                                                {% for item in result.unresolved_items %}<li>{{ item }}</li>{% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <span class="small text-muted">None recorded.</span>
+                                        {% endif %}
+                                        {% if ir and ir.unresolved_parameters %}
+                                            <div class="mt-2 pt-2 border-top">
+                                                <div class="small fw-bold text-warning">Unresolved Parameters:</div>
+                                                <ul class="small mb-0 ps-3">
+                                                    {% for up in ir.unresolved_parameters %}
+                                                        <li><code>{{ up }}</code> &mdash; unstated in SRS; not fabricated</li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="border rounded p-3 h-100">
+                                        <h6 class="small text-secondary fw-bold mb-2"><i class="bi bi-info-circle me-1"></i>Assumptions</h6>
+                                        {% if result.assumptions %}
+                                            <ul class="small mb-0 ps-3">
+                                                {% for item in result.assumptions %}<li>{{ item }}</li>{% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <span class="small text-muted">None recorded.</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Set-Level Context -->
+                    {% if result.set_context %}
+                    <div class="mt-4 border rounded p-3 bg-white shadow-sm">
+                        <h6 class="text-uppercase text-muted small font-weight-bold mb-2">
+                            <i class="bi bi-collection text-info me-1"></i>Batch Set-Level Context & Dependencies
+                        </h6>
+                        {% if result.set_context.section_clusters %}
+                            <div class="small mb-1"><strong>Section Context:</strong> {{ result.set_context.section_clusters }}</div>
+                        {% endif %}
+                        {% if result.set_context.shared_entities %}
+                            <div class="small mb-1"><strong>Shared Entities:</strong> <code>{{ result.set_context.shared_entities }}</code></div>
+                        {% endif %}
+                        {% if result.set_context.cross_dependencies %}
+                            <div class="small mb-1">
+                                <strong>Cross-Requirement Dependencies:</strong>
+                                <ul class="mb-0 ps-3">
+                                    {% for cd in result.set_context.cross_dependencies %}
+                                        <li>{{ cd }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
 
                 <!-- 2. Patterns Tab -->

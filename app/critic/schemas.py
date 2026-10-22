@@ -133,10 +133,36 @@ class CriticResult:
 
         rev_req = bool(data.get("revision_required", stat != "PASS"))
 
+        req_id = data.get("requirement_id")
+        if req_id is None:
+            req_id = data.get("id") or data.get("req_id")
+        if req_id is None:
+            raise CriticValidationError("CriticResult missing required field 'requirement_id'.")
+        try:
+            req_id_int = int(req_id)
+        except (ValueError, TypeError):
+            raise CriticValidationError(f"CriticResult field 'requirement_id' must be an integer, got {req_id!r}.")
+
+        global_num = data.get("global_number")
+        if global_num is None:
+            global_num = data.get("global_num") or data.get("number")
+        if global_num is None:
+            raise CriticValidationError("CriticResult missing required field 'global_number'.")
+        try:
+            global_num_int = int(global_num)
+        except (ValueError, TypeError):
+            raise CriticValidationError(f"CriticResult field 'global_number' must be an integer, got {global_num!r}.")
+
+        srs_id = data.get("srs_id")
+        if srs_id is None:
+            srs_id = data.get("srsId") or data.get("req_srs_id")
+        if srs_id is None:
+            raise CriticValidationError("CriticResult missing required field 'srs_id'.")
+
         return cls(
-            requirement_id=int(data["requirement_id"]),
-            global_number=int(data["global_number"]),
-            srs_id=str(data["srs_id"]),
+            requirement_id=req_id_int,
+            global_number=global_num_int,
+            srs_id=str(srs_id),
             status=stat,
             findings=findings_objs,
             missing_constraints=_get_list("missing_constraints"),

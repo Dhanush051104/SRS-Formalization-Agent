@@ -9,6 +9,8 @@ VALID_SYMBOL_CATEGORIES: Set[str] = {
     "VARIABLE",
     "CONSTANT",
     "ACTION",
+    "ENTITY",
+    "PROPOSITION",
 }
 
 VALID_SEVERITIES: Set[str] = {"ERROR", "WARNING", "INFO"}
@@ -48,6 +50,10 @@ class SymbolDefinition:
     version: str = "1.0.0"
     aliases: List[str] = field(default_factory=list)
     notes: Optional[str] = None
+    arity: Optional[int] = None
+    signature: Optional[str] = None
+    is_active: bool = True
+    user_approved: bool = False
 
     def is_global(self) -> bool:
         """Returns True if the symbol has global applicability."""
@@ -76,6 +82,10 @@ class SymbolDefinition:
             "version": self.version,
             "aliases": list(self.aliases),
             "notes": self.notes,
+            "arity": self.arity,
+            "signature": self.signature,
+            "is_active": self.is_active,
+            "user_approved": self.user_approved,
         }
 
     @classmethod
@@ -96,16 +106,31 @@ class SymbolDefinition:
         if not isinstance(aliases_raw, list):
             raise SymbolValidationError("Field 'aliases' must be a list of strings.")
 
+        # Arity parsing (int or None)
+        arity = data.get("arity")
+        if arity is not None:
+            try:
+                arity = int(arity)
+            except (ValueError, TypeError):
+                arity = None
+
+        prov = dict(data.get("provenance", {}))
+        user_approved = bool(data.get("user_approved", False) or prov.get("user_approved", False))
+
         return cls(
             identifier=str(data["identifier"]).strip(),
             spelling=str(data["spelling"]).strip(),
             definition=str(data["definition"]).strip(),
             category=cat,
             scope=str(data["scope"]).strip(),
-            provenance=dict(data.get("provenance", {})),
+            provenance=prov,
             version=str(data.get("version", "1.0.0")).strip(),
             aliases=[str(a).strip() for a in aliases_raw],
             notes=data.get("notes"),
+            arity=arity,
+            signature=data.get("signature"),
+            is_active=bool(data.get("is_active", True)),
+            user_approved=user_approved,
         )
 
 

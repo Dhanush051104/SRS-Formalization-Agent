@@ -48,7 +48,7 @@ class SymbolRetriever:
         Returns:
             SymbolRetrievalResult containing deterministically sorted global symbols.
         """
-        matches = [s for s in self.registry.get_all_symbols() if s.is_global()]
+        matches = [s for s in self.registry.get_all_symbols() if s.is_active and s.is_global()]
         return SymbolRetrievalResult(
             symbols=sorted(matches, key=lambda s: s.identifier),
             query_type="global",
@@ -72,6 +72,8 @@ class SymbolRetriever:
 
         matches: List[SymbolDefinition] = []
         for sym in self.registry.get_all_symbols():
+            if not sym.is_active:
+                continue
             if sym.is_global():
                 matches.append(sym)
             else:
@@ -111,6 +113,8 @@ class SymbolRetriever:
         matches: List[SymbolDefinition] = []
 
         for sym in self.registry.get_all_symbols():
+            if not sym.is_active:
+                continue
             if sym.category == cat_clean:
                 if scope is None or sym.matches_scope(scope):
                     matches.append(sym)
@@ -157,6 +161,8 @@ class SymbolRetriever:
         global_match: Optional[SymbolDefinition] = None
 
         for sym in self.registry.get_all_symbols():
+            if not sym.is_active:
+                continue
             sym_spellings = [sym.spelling.lower()] + [a.lower() for a in sym.aliases]
             if target_lower in sym_spellings:
                 if scope and sym.matches_scope(scope) and not sym.is_global():
